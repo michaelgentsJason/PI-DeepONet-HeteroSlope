@@ -1,0 +1,40 @@
+{
+  "geometry": {
+    "width": 1.0,
+    "height": 1.0,
+    "crest_width": 0.35,
+    "toe_height": 0.0
+  },
+  "soil": {
+    "background_ks": 0.15,
+    "zones": [
+      {
+        "x_min": 0.0,
+        "x_max": 0.45,
+        "z_min": 0.0,
+        "z_max": 1.0,
+        "saturated_conductivity": 0.05
+      },
+      {
+        "x_min": 0.45,
+        "x_max": 1.0,
+        "z_min": 0.0,
+        "z_max": 0.45,
+        "saturated_conductivity": 0.3
+      }
+    ]
+  },
+  "rainfall": {
+    "breakpoints": [0.0, 0.2, 0.6, 1.0],
+    "fluxes": [-0.03, -0.12, -0.05]
+  },
+  "initial_head": -0.5,
+  "sampling": {
+    "t_max": 1.0,
+    "n_residual": 2048,
+    "n_initial": 256,
+    "n_rainfall": 256,
+    "n_no_flow": 256,
+    "interface_tolerance": 0.01
+  }
+}

@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.eggs/
+*.egg
+dist/
+build/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.pkl
+*.pickle
+output/
+checkpoints/

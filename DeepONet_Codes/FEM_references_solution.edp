@@ -1,0 +1,149 @@
+/******************************************************************************
+ * Paper: Physics-informed neural operators for efficient modeling of infiltration in porous media
+ *        
+ * 
+ * Description: This script implements a high-fidelity finite element solver
+ *              for the Richards equation using FreeFEM++. It serves two purposes:
+ *              1. Evaluate the prediction accuracy of the neural operator model
+ *              2. Generate synthetic data for extrapolation or inverse problems
+ * 
+ * Developer: Hamza Kamil
+ * ORCID: https://orcid.org/0009-0009-7179-7970
+ ******************************************************************************/
+
+/******************************************************************************
+ * Execution Instructions:
+ * 1. Ensure FreeFEM++ is installed on your system.
+ * 2. Open a terminal or command prompt.
+ * 3. Navigate to the directory containing this script.
+ * 4. Run the following command:
+ *    FreeFEM++ FEM_references_solution.edp
+ * 
+ * Note: Replace 'FEM_references_solution.edp' with the actual filename if different.
+ ******************************************************************************/
+
+// Set verbosity and start CPU timer
+verbosity = 0;
+real cpu = clock();
+
+// Soil type selection
+string soiltype = "sand";
+
+// Soil parameters
+real Ks, alpha, thetas, thetar, n;
+
+// Set soil parameters based on soil type
+if (soiltype == "loam") {
+    Ks = 0.2496; alpha = 3.6; thetas = 0.43; thetar = 0.078; n = 1.56;
+    cout << "Soil type is loam" << endl;
+} else if (soiltype == "sand") {
+    Ks = 7.128; alpha = 14.5; thetas = 0.43; thetar = 0.045; n = 2.68;
+    cout << "Soil type is sand" << endl;
+} else if (soiltype == "sandy loam") {
+    Ks = 1.061; alpha = 7.5; thetas = 0.41; thetar = 0.065; n = 1.89;
+    cout << "Soil type is sandy loam" << endl;
+} else {
+    cout << "Unknown soil type" << endl;
+}
+
+// Derived parameters
+real hcap = 1/alpha, m = 1-1/n, phi = thetas-thetar, l =0.5;
+
+// Print soil parameters
+cout << "Ks = " << Ks << ", alpha = " << alpha << ", hcap = " << hcap << endl;
+cout << "thetas = " << thetas << ", thetar = " << thetar << ", porosity phi = " << phi << endl;
+cout << "n = " << n << ", m = " << m << endl;
+
+// Simulation parameters
+real q0 = -0.05;  // water surface flux
+real dt = 1e-3;   // time step
+real t = 0, tfin = 1;  // simulation start and end times
+cout << "Final simulation time T = : "<< tfin << endl; // enter 1
+real epsilon = 1e-6;  // convergence criterion for Picard iteration
+real err = 0; // error for tolerance cretaria checking
+int p = 0; // Picard iteration
+
+
+// Mesh geometry
+real xmin = 0, xmax = 1, zmin = 0, zmax = 1;
+int NN = 100;  // mesh size
+mesh Th = square(NN, NN, [xmin+(xmax-xmin)*x, zmin+(zmax-zmin)*y]);
+plot(Th, wait=0);  // plot the mesh
+
+// Van Genuchten Model functions
+macro theta(h)  ( (h < 0) ? thetar + phi * (1 + (alpha * abs(h) )^ n) ^ (-m) : thetas) //
+macro S(h)  ((theta(h)-thetar) * phi^(-1)) //
+macro K(h) ( (h <= 0) ? Ks*S(h)^(l)*(1 - (1 - S(h)^(m^(-1)))^m)^2 : Ks) // 
+macro dtheta(h) ((h < 0) ? (phi*alpha*m*n*(alpha*abs(h))^(n-1)*(1+(alpha*abs(h))^n)^(-m-1)):0) //  
+
+// FEM space
+fespace Vh(Th, P1);
+Vh hold, h, v, Kh, hk, thetaold, thetah, L;
+
+// Initial conditions
+if (soiltype == "loam") {
+    hold = -0.86623234;
+} else if (soiltype == "sandy loam") {
+    hold = -0.25308925;
+} else if (soiltype == "sand") {
+    hold = -0.33933398;
+}
+
+// Variational formulation
+varf Richard(h, v) =
+    int2d(Th, qft=qf1pTlump)(L * h * v + dt*Kh*(dy(h)*dy(v)+dx(h)*dx(v)))
+    + int2d(Th, qft=qf1pTlump)(L*hk*v - thetah*v + thetaold * v - dt*Kh* dy(v))
+    - int1d(Th, 3)(dt*q0*v)  // water flux
+    - int1d(Th, 1)(dt*Kh*v);  // free drainage at bottom
+
+matrix<real> A; 
+real[int]  F = Richard(0,Vh); 
+
+// Main simulation loop
+for (t=dt;t<=tfin;t+=dt)
+{
+      // Initialize variables for modifed Picard iteration
+  err=0.0;
+   hk=hold;
+thetaold=theta(hk);
+L=dtheta(hk);
+thetah=theta(hk);
+  Kh=K(hk);
+
+A = Richard(Vh, Vh, solver=sparsesolver); 
+ F = Richard(0,Vh); 
+ h[] = A^-1*F; 
+ err=int2d(Th)((h-hk)^2);
+ p=0;
+ while (sqrt(err)>=epsilon) 
+   {
+   hk=h;
+  L=dtheta(hk);
+thetah=theta(hk);
+  Kh=K(hk);
+ A = Richard(Vh, Vh,solver=sparsesolver); 
+ F = Richard(0,Vh); 
+h[] = A^-1*F; 
+   err=int2d(Th)((h-hk)^2); 
+p=p+1;
+if(p==10) {cout<< "divergence" <<endl;
+ }
+  }
+
+
+plot(thetah,wait=0,cmm=t,value=1,fill=1); // plot the solution
+
+cout << t << endl; // print current time
+hold=h; // update for next time step
+
+} 
+
+
+// Print CPU time
+cout << "CPU time = " << (clock()-cpu) << " seconds" << endl;
+
+//// save the data and plot it in MATLAB (see FreeFEM++ website) or in Paraview. Here we provide the code for MATALB//
+// include "freefem_matlab_octave_plot-public/release-v2.0/demos/ffmatlib.idp" // change it to your corresponding path
+// savemesh(Th, "mesh.msh"); // save the mesh
+// ffSaveVh(Th, Vh, "Vh_space.txt"); // save the Vh space 
+// ffSaveData3(h, h, h, soiltype + "solution.txt"); // save the solutions

@@ -1,0 +1,37 @@
+{
+  "physics": {
+    "theta_r": 0.078,
+    "theta_s": 0.43,
+    "alpha": 0.036,
+    "n": 1.56,
+    "mean_log_ks": 3.0,
+    "variance_log_ks": 3.0,
+    "correlation_length_cm": 50.0,
+    "depth_cm": 99.0,
+    "n_kle_modes": 9,
+    "initial_head_cm": -50.0,
+    "top_flux_cm_per_day": -1.0,
+    "t_final_days": 10.0
+  },
+  "branch_inputs": {
+    "rainfall_sensor_count": 101,
+    "heterogeneity_seed": 7
+  },
+  "training": {
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "iterations": 1500,
+    "log_every": 100,
+    "n_residual": 512,
+    "n_initial": 128,
+    "n_top": 128,
+    "n_bottom": 128,
+    "seed": 0
+  },
+  "loss_weights": {
+    "initial": 5.0,
+    "top_flux": 20.0,
+    "bottom": 5.0,
+    "residual": 1.0
+  }
+}

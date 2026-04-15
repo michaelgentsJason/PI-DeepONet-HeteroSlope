@@ -1,0 +1,60 @@
+{
+  "geometry": {
+    "width": 99.0,
+    "height": 99.0,
+    "crest_width": 35.0,
+    "toe_height": 0.0
+  },
+  "soil": {
+    "background_ks": 20.085536923187668,
+    "zones": [
+      {
+        "x_min": 0.0,
+        "x_max": 45.0,
+        "z_min": 50.0,
+        "z_max": 99.0,
+        "saturated_conductivity": 8.0
+      },
+      {
+        "x_min": 45.0,
+        "x_max": 99.0,
+        "z_min": 0.0,
+        "z_max": 45.0,
+        "saturated_conductivity": 45.0
+      }
+    ]
+  },
+  "rainfall": {
+    "breakpoints": [0.0, 10.0],
+    "fluxes": [-1.0]
+  },
+  "physics": {
+    "theta_r": 0.078,
+    "theta_s": 0.43,
+    "alpha": 0.036,
+    "n": 1.56,
+    "initial_head_cm": -50.0,
+    "t_final_days": 10.0
+  },
+  "branch_inputs": {
+    "rainfall_sensor_count": 101
+  },
+  "training": {
+    "hidden_dim": 24,
+    "learning_rate": 0.001,
+    "iterations": 1000,
+    "log_every": 100,
+    "n_residual": 384,
+    "n_initial": 96,
+    "n_rainfall": 96,
+    "n_no_flow": 96,
+    "interface_tolerance": 1.0,
+    "seed": 1
+  },
+  "loss_weights": {
+    "initial": 5.0,
+    "rainfall": 20.0,
+    "no_flow": 5.0,
+    "residual": 1.0
+  }
+}

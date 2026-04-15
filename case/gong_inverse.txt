@@ -1,0 +1,1988 @@
+RESEARCH ARTICLE                           Physics–Informed Neural Network With Enhanced
+10.1029/2025WR040040
+                                           Parameter–State Coupling for Inverse Modeling of
+Special Collection:                        Unsaturated Flow in Heterogeneous Soils
+Advancing Interpretable AI/ML
+Methods for Deeper Insights and            Xuezi Gong1         and Yuanyuan Zha1
+Mechanistic Understanding in               1
+Earth Sciences: Beyond                         State Key Laboratory of Water Resources Engineering and Management, Wuhan University, Wuhan, China
+Predictive Capabilities
+
+Key Points:
+                                           Abstract Modeling unsaturated flow remains challenging due to the interplay of uncertain atmospheric
+                                           forcing, parameter heterogeneity, and sparse observations. This study presents the application of physics–
+• KLE–PINN framework successfully
+  handles combined soil heterogeneity      informed neural networks (PINNs) with Karhunen–Loève Expansion (KLE) to unsaturated flow, specifically
+  and boundary uncertainty in unsatu-      designed to handle both soil heterogeneity and boundary uncertainty. We propose KLE–PINN–EC (Enhanced
+  rated flow modeling
+                                           Coupling), a novel architecture that explicitly couples parameter and state representations through a branch–
+• Novel KLE–PINN–EC with explicit
+  parameter–state coupling demonstrates    trunk design to enhance learning from sparse data. Through numerical experiments, we compare KLE–PINN–
+  superior performance over standard       EC against (a) standard KLE–PINN, previously successful in groundwater modeling but untested for highly
+  KLE–PINN under sparse observations
+                                           nonlinear unsaturated flow, and (b) ensemble smoother with multiple data assimilation (ES–MDA), a well–
+• KLE–PINN–EC maintains robust per-
+  formance under highly uncertain          established data assimilation method. Our findings reveal that: (a) KLE–PINN successfully handles combined
+  boundaries where ES–MDA faces sig-       uncertainties in parameters and boundary conditions; (b) KLE–PINN–EC achieves superior performance over
+  nificant challenges
+                                           standard KLE–PINN in sparse data scenarios; and (c) while ES–MDA performs competitively when boundary
+                                           timing is known, its performance degrades significantly under uncertainty in boundary timing, whereas KLE–
+Correspondence to:                         PINN–EC maintains robust performance. These results suggest that the KLE–PINN–EC framework provides a
+Y. Zha,                                    flexible and robust alternative for characterizing unsaturated zone processes in environments where both
+zhayuan87@whu.edu.cn
+                                           boundary conditions and subsurface properties are poorly constrained.
+
+Citation:
+Gong, X., & Zha, Y. (2025). Physics–
+informed neural network with enhanced      1. Introduction
+parameter–state coupling for inverse
+modeling of unsaturated flow in            Soil water is integral to numerous hydrological processes, influencing phenomena such as infiltration, evapo-
+heterogeneous soils. Water Resources       transpiration, and groundwater recharge (Nielsen et al., 1986; Sophocleous, 2002). The Richardson–Richards
+Research, 61, e2025WR040040. https://
+                                           equation (RRE) is widely used to model soil water dynamics (Richards, 1931; Richardson, 1922), though its
+doi.org/10.1029/2025WR040040
+                                           nonlinearity and complex constitutive relationships pose significant computational challenges (Farthing &
+Received 15 FEB 2025                       Ogden, 2017; Zha et al., 2019). While various numerical methods have been developed—often with techniques
+Accepted 28 AUG 2025                       like primary variable switching and semi–discretization (Berardi & Vurro, 2016; Zha et al., 2019)—their ac-
+                                           curacy strongly depends on precise inputs. Unfortunately, these inputs are typically difficult to obtain or subject to
+                                           considerable uncertainty (Herrera et al., 2022; Yu et al., 2019).
+                                           Three primary sources of uncertainty stand out in unsaturated flow modeling. First, the upper boundary condition
+                                           (uBC), predominantly controlled by atmospheric forcing (e.g., precipitation, evapotranspiration), can exhibit
+                                           significant temporal variability and limited spatial coverage (Bauer et al., 2015; Thorndahl et al., 2017; F. Zheng
+                                           et al., 2018). As a result, uncertainty in uBC is considered a major source of error in soil water modeling, with
+                                           numerous studies investigating how uncertainty in atmospheric forcings impacts simulation outcomes (Gelati
+                                           et al., 2018; Lee et al., 2025; Shrestha et al., 2020). Second, soil heterogeneity stems from spatial variability in
+                                           texture and structure, leading to highly variable hydraulic properties that are difficult to measure directly (Bauser
+                                           et al., 2020). Oversimplifying these variations through averaged or homogenized parameters can lead to scale
+                                           effects and inaccuracies (Bauser et al., 2022; Vogel, 2019). Third, direct hydraulic observations (e.g., water
+                                           content and matric potential) are generally sparse, subject to sensor noise, and expensive to deploy (Bogena
+                                           et al., 2007; Zhuo et al., 2020). These factors create additional uncertainty in accurately constraining model states
+© 2025. The Author(s).                     and parameters.
+This is an open access article under the
+terms of the Creative Commons              A common approach to tackling these uncertainties is data assimilation (DA), which systematically integrates
+Attribution License, which permits use,    observations and model predictions to refine states or parameters (Carrassi et al., 2018; Geer, 2021). DA methods
+distribution and reproduction in any
+medium, provided the original work is      have proven effective in many hydrological applications and continue to evolve with advances. However, they
+properly cited.                            can be computationally demanding due to repeated forward model runs, and typically operate under specific
+
+
+GONG AND ZHA                                                                                                                                             1 of 35
+                                                                                                                                      19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                    10.1029/2025WR040040
+
+
+               assumptions about error statistics and parameter–output relationships (Carrassi et al., 2018). Parallel to DA,
+               machine learning (ML), particularly deep learning (DL), has emerged as a flexible alternative that can learn from
+               data with less reliance on explicit physical models (Shen, 2018; Sit et al., 2020; P. Li et al., 2020). Yet DL often
+               requires extensive, high–quality data sets, raising concerns about interpretability and generalizability (Alzubaidi
+               et al., 2023; Lazer et al., 2014; Loyola‐Gonzalez, 2019).
+               To address these limitations, hybrid approaches embedding physical principles into ML models have gained
+               traction (Karniadakis et al., 2021; Karpatne et al., 2017). Among these, physics–informed neural networks
+               (PINNs) incorporate governing equations directly into the loss function, ensuring consistency between model
+               outputs, observed data, and underlying physics (Raissi et al., 2019). Supported by automatic differentiation (AD)
+               in modern DL frameworks, PINNs have found success in solving partial differential equations, notably in fluid
+               mechanics and beyond (Abadi et al., 2016; Cai et al., 2021; Cuomo et al., 2022; Paszke et al., 2019). These
+               advantages have naturally attracted attention in subsurface flow modeling. For example, DA can leverage
+               physics–informed ML as an alternative optimization method (Yeung et al., 2022) or employ it as a surrogate
+               model for forward simulations (N. Wang et al., 2021b). Meanwhile, PINNs can be applied directly without
+               explicit forward solvers, making them particularly suitable for problems with uncertain or only partially known
+               conditions.
+               Motivated by these features, researchers have begun exploring PINNs for unsaturated flow. Tartakovsky
+               et al. (2020) pioneered PINNs to capture the hydraulic conductivity function (HCF) in homogeneous, steady–state
+               unsaturated flow. Bandai and Ghezzehei (2021) introduced monotonic neural networks to represent both the
+               water retention curve (WRC) and HCF, preserving their inherent monotonicity. Depina et al. (2022) extended
+               PINNs to inverse problems by integrating the van Genuchten–Mualem constitutive model (Mualem, 1976; Van
+               Genuchten, 1980). Further advancements addressed specific challenges in unsaturated flow modeling. Bandai and
+               Ghezzehei (2022) developed a domain decomposition strategy for PINNs to invert surface flux. Y. Wang, Wang,
+               et al. (2023) enhanced soil moisture prediction by incorporating both the RRE and water balance constraints.
+               Bandai et al. (2024) further showed that PINNs could invert constitutive relationships with greater flexibility than
+               traditional parameterized models. Recent studies have expanded PINNs to more complex and higher dimensional
+               scenarios, including incorporating hydrothermal processes to improve water flux estimates (Y. Wang, Shi,
+               et al., 2023), integrating geoelectric data for solute transport modeling (Haruzi & Moreno, 2023), and charac-
+               terizing two–dimensional soil water dynamics in heterogeneous soils (Sakar et al., 2024).
+               Despite these notable efforts, to the best of our knowledge, two critical aspects of real–world unsaturated systems
+               have received limited attention when considered jointly in PINN–based modeling. First, uncertainty in the uBC is
+               frequently simplified, with many studies assuming well–defined or perfectly known uBC (sometimes even a
+               simple Dirichlet or time–independent boundary) (Depina et al., 2022; Y. Chen et al., 2023; Oikawa & Saito, 2024;
+               Sakar et al., 2024). Second, although some investigations account for soil heterogeneity, they often rely on
+               simplified hydraulic architectures, such as layered or effectively homogeneous representations (Bandai &
+               Ghezzehei, 2022; Elkhadrawi et al., 2024; Oikawa & Saito, 2024). The combined effect of uncertain uBC and
+               strong spatial variability in soil properties thus remains underexplored. Addressing this gap is crucial for real–
+               world applications, where atmospheric forcing is rarely perfectly known and soil hydraulic parameters can
+               vary considerably at multiple scales.
+               In contrast, significant progress has been made in groundwater (saturated) flow, where geostatistical approaches
+               have been integrated with PINNs to handle spatial heterogeneity (J. Li & Tartakovsky, 2022; N. Wang
+               et al., 2020; N. Wang et al., 2021a, 2021b; N. Wang et al., 2024; Q. Zheng et al., 2020). Particularly, Ji
+               et al. (2024) combined the Karhunen–Loève Expansion (KLE) with PINN (KLE–PINN) to perform hydraulic
+               tomography under missing boundary cases. KLE is likewise widely used to represent soil heterogeneity (Das
+               et al., 2010; Shibata et al., 2025; Yang et al., 2004), suggesting its potential applicability to unsaturated flow.
+               However, while KLE–PINN has proven effective in groundwater contexts, unsaturated flow poses additional
+               challenges due to higher nonlinearity and uncertain, dynamic atmospheric forcing. Whether this framework can
+               replicate its success in unsaturated flow—where the RRE constraint is more nonlinear and uBC is far more
+               variable—remains an open question.
+
+               Furthermore, while PINNs have demonstrated the potential to handle uncertain boundary conditions, this
+               capability is not exclusive to them. Traditional DA methods have long been developed, at least in principle, to
+               address uncertainties in both model parameters and boundary conditions (Gillijns & Moor, 2007). Thus, a natural
+
+
+GONG AND ZHA                                                                                                               2 of 35
+                                                                                                                                          19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                       10.1029/2025WR040040
+
+
+               question arises: how do PINNs compare with established DA approaches when confronted with uncertain uBC
+               and heterogeneous soil properties? Additionally, previous KLE–PINN studies suggest that direct measurements
+               of hydraulic conductivity can be beneficial for success (N. Wang et al., 2021a, 2024; Q. Zheng et al., 2020). In
+               unsaturated flow, however, such direct data are typically even harder to obtain, raising further questions about
+               performance in data–scarce settings. Consequently, it remains unclear whether KLE–PINN can effectively
+               address these limitations and how it compares with well–designed DA methods.
+               To address these questions, we propose a KLE–PINN framework specifically designed for unsaturated flow,
+               explicitly handling uncertain uBC and highly heterogeneous soil parameters. We introduce KLE–PINN–EC
+               (Enhanced Coupling), a novel architecture that incorporates explicit parameter–state coupling to improve
+               learning from sparse observations. We then systematically compare this approach with a traditional DA method
+               (ensemble smoother with multiple data assimilation, ES–MDA) to investigate the relative strengths and limita-
+               tions of each approach under various uncertainty scenarios. The remainder of this paper is organized as follows:
+               Section 2 outlines the research methodology, detailing the governing equations of unsaturated flow, the proposed
+               PINN methods, and the ES–MDA framework. Section 3 describes the experimental setup. Section 4 presents and
+               discusses the experimental results, focusing on the interplay between uncertain uBCs and soil heterogeneity.
+               Finally, Section 5 concludes the study and highlights key directions for future research.
+
+
+               2. Methodology
+               2.1. Unsaturated Flow Equations
+               In unsaturated, isothermal, isotropic soils—neglecting hysteresis, vapor flow, and source terms—the RRE
+               governs unsaturated flow. Although flow is inherently 3D in the real world, vertical fluxes typically dominate at
+               field or regional scales, rendering horizontal fluxes relatively negligible (Z. Chen et al., 1994; Mantoglou, 1992).
+               Consequently, the 1D simplification underlies numerous operational vadose–zone and land–surface models, such
+               as HYDRUS–1D (Simunek et al., 2005), Noah–MP (Niu et al., 2011), and CLM5 (Lawrence et al., 2019).
+               Adopting a 1D framework captures the dominant flux dynamics while minimizing data and computational de-
+               mands. This study therefore focuses on a 1D scenario to highlight the proposed PINN approach without obscuring
+               the central methodological contributions. The mixed–form RRE can be written as:
+
+                                                 ∂θ ∂   ∂ψ       ∂K ∂ψ       ∂2ψ
+                                                   = [K( + 1)] =   ( + 1) + K 2                                                    (1)
+                                                 ∂t ∂z  ∂z       ∂z ∂z       ∂z
+
+               where t [T] is time coordinate; z [L] is positive–upward vertical space coordinate; ψ [L] is matric potential; θ [− ] is
+               volumetric water content; K [LT− 1] is hydraulic conductivity.
+               In the mixed form of the RRE involving θ and ψ, the constitutive relationships can be described by the van
+               Genuchten–Mualem (VGM) model (Mualem, 1976; van Genuchten, 1980):
+
+                                                            ⎧
+                                                            ⎪
+                                                            ⎪            1
+                                                            ⎪
+                                                            ⎪ m =1−
+                                                            ⎪
+                                                            ⎪            n
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪               θ s − θr
+                                                            ⎪
+                                                            ⎪ θ = θr +
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪            (1 +  |αψ|n )m
+                                                            ⎨
+                                                                   θ − θr                                                          (2)
+                                                            ⎪
+                                                            ⎪Se =
+                                                            ⎪
+                                                            ⎪     θ s − θr
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪        1               1 m 2
+                                                            ⎪
+                                                            ⎪K r = S2e [1 − (1 − Sme ) ]
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎩ K = Kr Ks
+
+
+               where θr [− ] is residual water content; θs [− ] is saturated water content; α [L− 1], n [− ] and m [− ] are empirical
+               parameters; Se [− ] is effective saturation; K r [− ] is relative hydraulic conductivity; K s [LT− 1] is saturated hy-
+               draulic conductivity.
+
+
+
+
+GONG AND ZHA                                                                                                                   3 of 35
+                                                                                                                                             19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                         10.1029/2025WR040040
+
+
+               In this study, the focus is placed on the spatial variability of K s , while other parameters in Equation 1, including θr ,
+               θs , α, and n, are assumed to be uniform and known. This simplification reduces the complexity of the inverse
+               problem, which could otherwise become ill–posed if multiple parameters are estimated simultaneously (Russo
+               et al., 1991). Additionally, this choice is justified by the critical role that K s plays in influencing infiltration and
+               redistribution processes in unsaturated soils (Russo & Bouton, 1992; Van Genuchten, 1980).
+               Isolating the spatial variation of K s ensures that the observed differences in results primarily reflect the robustness
+               and accuracy of the algorithm, rather than the confounding effects introduced by the simultaneous estimation of
+               parameters. Consequently, the partial derivative of K in Equation 1 can be computed using Equation 2 and the
+               chain rule:
+
+                                                      ⎪
+                                                      ⎧ ∂K ∂(K r K s ) ∂K s   ∂K r ∂ψ
+                                                      ⎪
+                                                      ⎨ ∂z = ∂z = K r ∂z + K s ∂ψ ∂z
+                                                      ⎪
+                                                                                                                                      (3)
+                                                      ⎪
+                                                      ⎪ ∂K ∂K r ∂Se
+                                                      ⎪
+                                                      ⎩ r=          C
+                                                        ∂ψ ∂Se ∂θ
+
+               where C [L− 1] is the specific moisture capacity and equals dθ/ dψ. The subsequent PINNs will construct the loss
+               term based on the governing equations and computational pathways defined in this section, thereby physically
+               guiding the training process of the neural network.
+
+               2.2. PINNs
+               2.2.1. Motivation and Comparison
+
+               Multi–layer perceptrons (MLPs) are powerful tools for function approximation (Cybenko, 1989; Hornik
+               et al., 1989). In PINNs, the central concept is to combine a data–driven loss term with a physics–based loss term,
+               the latter evaluated via AD in DL frameworks such as PyTorch (Ketkar & Moolayil, 2021; Paszke et al., 2019).
+               However, training PINNs can be challenging when dealing with complex partial differential equations, because of
+               gradient flow pathologies that can impede convergence (S. Wang et al., 2021). To mitigate this, we adopt a
+               modified MLP architecture (see Appendix A).
+               Building on the Karhunen–Loève Expansion (KLE, detailed in Appendix B), we integrate KLE with PINN to
+               form the KLE–PINN architecture (Figure 1a). In essence, KLE–PINN has two main components: one network
+               maps spatiotemporal coordinates to state variables (e.g., matric potential ψ), while another encodes the hetero-
+               geneous parameter field via a finite set of random coefficients. This setup has demonstrated promise in addressing
+               parameter heterogeneity in groundwater flow (Ji et al., 2024; J. Li & Tartakovsky, 2022; N. Wang et al., 2021a; N.
+               Wang et al., 2024).
+               However, to the best of our knowledge, in these existing KLE–PINN frameworks for direct inversion, parameter
+               heterogeneity typically influences the states only through the physics–based loss term. Such an indirect coupling
+               may not fully leverage the rich information embedded in scarce observations, as the parameter–state relationships
+               are mediated solely through the PDE–based loss term rather than being directly learned from data.
+               To address this limitation, we propose three different architectures:
+               1. Direct Parameter–State Coupling (KLE–PINN–C) A straightforward remedy is to directly feed the KLE–
+                  derived parameter features into the PINN as additional inputs, thereby explicitly coupling parameters and
+                  states. We refer to this as KLE–PINN with direct state–parameter coupling (KLE–PINN–C, Figure 1a). This
+                  direct approach follows the intuition that explicit parameter information should help the network better capture
+                  parameter–state relationships, especially when observations are limited. Although this approach seems intu-
+                  itive, simply appending extra inputs can potentially introduce additional optimization challenges.
+               2. Enhanced Parameter–State Coupling via Branch–Trunk (KLE–PINN–EC) While direct coupling (KLE–
+                  PINN–C) provides explicit parameter information to the network, a standard MLP may still learn to bypass
+                  parameter inputs and predominantly rely on spatiotemporal coordinates to predict states, especially when the
+                  parameter–state relationships are complex. Drawing inspiration from DeepONet (Lu et al., 2021), we separate
+                  the processing of heterogeneous parameter features (branch network) from spatiotemporal coordinates (trunk
+
+
+
+
+GONG AND ZHA                                                                                                                      4 of 35
+                                                                                                                                                   19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                             10.1029/2025WR040040
+
+
+
+
+               Figure 1. Architectures of four KLE–PINN variants. (a) KLE–PINN and KLE–PINN–C: baseline KLE–PINN takes only
+               (t, z) as inputs, whereas KLE–PINN–C also includes parameter features e(zi ) directly (dashed black lines). (b) KLE–PINN–
+               BT and KLE–PINN–EC: both adopt a branch–trunk structure. In KLE–PINN–BT, only (t, z) is used in each branch/trunk
+               (dashed black lines), while in KLE–PINN–EC the e(zi ) explicitly enter the branch network via a dot–product. Blue/red circles:
+               variables; blue boxes: non–trainable inputs; yellow boxes: trainable inputs; “∗”: element–wise multiplication; “ ×”: dot product.
+               The “encoder” is an auxiliary layer introduced to mitigate gradient flow pathologies.
+
+                  network), combining their outputs via a dot product. This architecture compels the network to consider
+                  parameter influences at every prediction, as the final output directly depends on both branch and trunk
+                  contributions—the network cannot generate predictions without accounting for parameter features. We denote
+                  this approach as KLE–PINN with enhanced state–parameter coupling (KLE–PINN–EC, Figure 1b). Unlike
+                  the standard DeepONet, which often assumes fixed sensor measurements for operator learning, our KLE–
+                  PINN–EC aligns each branch feature with its corresponding spatial location dynamically, avoiding the
+                  complexity of high–dimensional input functions that are not central to this study.
+               3. Branch–Trunk Without Parameter–State Coupling (KLE–PINN–BT) To isolate the effect of the branch–trunk
+                  architecture itself from the effect of explicit coupling, we also implement a variant called KLE–PINN with
+                  branch–trunk structure (KLE–PINN–BT). This model adopts the same branch–trunk structure but handles
+                  information in a manner analogous to the original KLE–PINN (without the direct parameter–state coupling in
+                  the forward pass). By comparing KLE–PINN–BT with KLE–PINN–EC, we can determine how much per-
+                  formance gain arises specifically from enhanced coupling rather than merely from the branch–trunk design.
+
+
+
+
+GONG AND ZHA                                                                                                                           5 of 35
+                                                                                                                                                             19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                        Water Resources Research                                                                   10.1029/2025WR040040
+
+
+
+                Table 1
+                Comparison of the Key Features of the Proposed KLE–PINN Variants
+                Model                                         Explicit parameter–state coupling                                Branch–trunk structure
+                KLE–PINN                                                       ✗                                                           ✗
+                KLE–PINN–C                                                     ✓                                                           ✗
+                KLE–PINN–BT                                                    ✗                                                          ✓
+                KLE–PINN–EC                                                    ✓                                                          ✓
+
+
+
+               Table 1 summarizes the key features of our three proposed variants. In simple terms, they differ along two main
+               axes: the presence of explicit parameter–state coupling and the use of a branch–trunk architecture.
+
+
+               2.2.2. Implementation Details
+
+               All four frameworks, KLE–PINN, KLE–PINN–C, KLE–PINN–BT and KLE–PINN–EC, share the same geo-
+               statistical prior for the parameter field, derived via KLE (see Appendix B). Specifically, the spatially varying K s is
+               projected onto a truncated set of parameter features e(zi ) , which is computed using the eigenfunction fn (z) at the
+                                                                                                 √̅̅̅̅̅
+               spatial coordinate zi , scaled by the square root of the corresponding eigenvalue λn . Formally, at any location zi ,
+               the parameter field can be approximated by:
+
+                                                                                                Nkl     √̅̅̅̅̅
+                                               K s (zi , τ) ≈ K̂ s (zi , τ) = exp(ln[K s (z)] + ∑ ξn (τ) λn fn (zi ))                                 (4)
+                                                                                                    n=1
+
+                                                                                              √̅̅̅̅̅
+               where ξn (τ) are trainable random coefficients. Details on computing fn (z) and λn can be found in Equations B5
+               and B6 in Appendix B.
+               The key distinction among the four frameworks lies in how these parameter features e(zi ) ultimately couple to the
+               final state variable ψ(ti , zi ) . As shown in Equation 5, the outputs of KLE–PINN, KLE–PINN–C, KLE–PINN–BT
+               and KLE–PINN–EC are denoted by fΘ (ti , zi ) , N Θ (e(zi ), ti , zi ) , gΘ (ti , zi ) (ti , zi ) and GΘ (e(zi )) (ti , zi ) , respectively.
+               In the baseline KLE–PINN, the state–parameter interaction occurs implicitly through the physics–based loss
+               term. By contrast, KLE–PINN–C feeds e(zi ) directly into the network as additional inputs, which can be viewed
+               as an explicit coupling. Both KLE–PINN–BT and KLE–PINN–EC employ a branch–trunk structure, yet only
+               KLE–PINN–EC explicitly couples e(zi ) and ψ via a dot–product mechanism.
+
+
+                                                            ⎧
+                                                            ⎪
+                                                            ⎪ψ̂(ti , zi ) = − exp( fΘ (ti , zi ))
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪ψ̂(ti , zi ) = − exp(N Θ (e(zi ), ti , zi ))
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪ψ̂(t , z = − exp( gΘ (ti , zi ) (ti , zi ))
+                                                            ⎨ i i)
+                                                            ⎪
+                                                             ψ̂(ti , zi ) = − exp(GΘ (e(zi )) (ti , zi ))                                             (5)
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪                                 T
+                                                            ⎪
+                                                            ⎪ξ̂(τ) = [ξ̂1 (τ), ..., ξ̂Nkl (τ)]
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪
+                                                            ⎪             √̅̅̅̅̅             √̅̅̅̅̅̅̅
+                                                            ⎪
+                                                            ⎪                                             T
+                                                            ⎪
+                                                            ⎩e(zi ) = [ λ1 f 1 (zi ), ..., λN fN (zi )]
+                                                                                               kl    kl
+
+
+
+
+               To ensure that the predicted matric potential ψ̂(ti , zi ) remains non–positive, we adopt the transformation − exp(·),
+               following Bandai and Ghezzehei (2021). Combining the predicted results from Equations 4 and 5 with Equation 2
+               leads to:
+
+
+
+
+GONG AND ZHA                                                                                                                                    6 of 35
+                                                                                                                                             19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                                  10.1029/2025WR040040
+
+
+
+
+                                                ⎧
+                                                ⎪
+                                                ⎪                                θs − θ r
+                                                ⎪
+                                                ⎪θ̂(ti , zi ) = θr +
+                                                ⎪
+                                                ⎪                      (1   +   |α  ψ̂(ti , zi )|n )m
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎪                 θ̂(t , z ) − θr
+                                                ⎨ Ŝe (ti , zi ) = i i
+                                                                      θs − θ r                                                         (6)
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎪                                                         m 2
+                                                ⎪
+                                                ⎪ K̂ (t , z ) = Ŝ (t , z )12 [1 − (1 − Ŝ (t , z )m1 ) ]
+                                                ⎪
+                                                ⎪    r i i           e i i                          e i i
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎪
+                                                ⎩
+                                                  K̂(ti , zi ) = K̂ r (ti , zi ) K̂ s (zi , τ)
+
+               Implementing the PINN frameworks involves two primary steps: (a) Forward propagation: The model predicts θ
+               based on the input data; (b) Backward propagation: Using automatic differentiation, the model parameters
+               (including the random coefficients ξ̂(τ) in KLE) are updated by minimizing the total loss. This loss typically
+               consists of: (a) A physics–based loss evaluated at collocation points, measuring the deviation from the governing
+               RRE; (b) A data mismatch loss evaluated at observation points, measuring the difference between predicted and
+               observed states.
+
+               Let Ricol denote the residual at a collocation point ( tcol  col
+                                                                       i , zi ) , indicating how well the RRE is satisfied:
+
+
+
+                                                 ⎪
+                                                 ⎧        ∂ θ̂       ∂ K̂ ∂ ψ̂               ∂ 2 θ̂
+                                                 ⎪
+                                                 ⎪
+                                                 ⎪Ricol = col −        col ( col + 1) − K̂          2
+                                                 ⎨       ∂ti        ∂zi ∂zi                ∂( zcol
+                                                                                               i )
+                                                                                                                                       (7)
+                                                 ⎪
+                                                 ⎪
+                                                 ⎪
+                                                 ⎪  ∂ K̂       ∂ K̂         ∂ K̂ ∂ ψ̂
+                                                 ⎩ col = K̂ r cols + K̂ s r col
+                                                   ∂zi         ∂zi           ∂ ψ̂ ∂zi
+
+
+               where Ricol ≈ 0 implies good agreement with the PDE. The physics–based loss term Lphysics can thus be defined
+               as the mean squared error of these residuals. Similarly, the data mismatch loss Ldata captures the difference
+               between the predicted and observed values, as shown in Equation 8.
+
+
+                                                             ⎪
+                                                             ⎧
+                                                             ⎪             1 Ncol col 2
+                                                             ⎪
+                                                             ⎪ Lphysics =      ∑(R )
+                                                             ⎪
+                                                             ⎨            Ncol i=1 i
+                                                                                                                                       (8)
+                                                             ⎪
+                                                             ⎪
+                                                             ⎪
+                                                             ⎪         1 Nobs obs 2
+                                                             ⎪
+                                                             ⎩Ldata =      ∑ (R )
+                                                                      Nobs i=1 i
+
+
+               where Riobs denotes the residual at an observation point ( tobs  obs
+                                                                           i , zi ) :
+
+
+                                                         Riobs = θ̂( tobs  obs       obs obs
+                                                                      i , zi ) − θ( ti , zi )                                          (9)
+
+               By assigning weight coefficients to each loss term, the total loss Ltotal is:
+
+                                                        Ltotal = λphysics Lphysics + λdata Ldata                                   (10)
+
+               where λphysics and λdata balance the relative importance of satisfying physical laws and matching observational
+               data. Minimizing Ltotal via the back–propagation algorithm (Hecht‐Nielsen, 1989) yields optimal network
+               parametersΘ and the trainable random coefficients ξ̂(τ) :
+
+                                                               [ ξ̂(τ);Θ] = argminLtotal                                           (11)
+                                                                                ξ̂(τ);Θ
+
+
+               Notably, PINNs naturally accommodate flexible or partially unknown boundary and initial conditions, as they do
+               not require explicit boundary constraints to be hard–coded; instead, these can be incorporated as additional soft–
+               constraints or data terms if desired.
+
+
+
+GONG AND ZHA                                                                                                                     7 of 35
+                                                                                                                                          19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                        10.1029/2025WR040040
+
+
+
+
+               Figure 2. Schematic flowchart of ES–MDA.
+
+               2.3. ES–MDA
+               DA provides a systematic way to integrate model predictions with observations, playing a crucial role in
+               quantifying uncertainty in hydrological modeling (Liu & Gupta, 2007; Vrugt et al., 2005). Among the various DA
+               techniques, ES–MDA is particularly attractive due to its efficiency and ease of implementation. Unlike the
+               ensemble Kalman filter (EnKF), which requires frequent simulation restarts in sequential updates, ES–MDA
+               eliminates this need while achieving superior data matching compared to standard ensemble smoothers and
+               EnKF, all with comparable computational cost (Emerick & Reynolds, 2013).
+               A schematic flowchart of ES–MDA is depicted in Figure 2. The method aims to iteratively update an ensemble of
+               parameters (or state variables) x so as to reduce the mismatch between the observed data d and the model pre-
+               dictions F(x) . Below, we outline the main steps:
+
+               2.3.1. Initial Ensemble
+                                                                                          Ne
+               Begin with an initial ensemble Ne of realizations of x, denoted as {x(0)
+                                                                                    i }          . These realizations capture the prior
+                                                                                          i =1
+               uncertainty in x. When x refers specifically to K s , the realizations can be generated using the KLE:
+
+                                                                         Nkl      √̅̅̅̅̅
+                                                                             i
+                                                 x(0)
+                                                  i = exp (ln[K s (z)] + ∑ ξ̂n (τ) λn fn (z) )                                    (12)
+                                                                          n=1
+
+
+               2.3.2. Forward Model Predictions
+
+               Given the initial parameter ensemble {x(0)
+                                                      i } , use a forward model F(·) to compute model–predicted observations:
+
+
+                                                          d(0)    (0)
+                                                           i = F(xi ), i = 1, ..., Ne                                             (13)
+
+
+               Here, d(0)
+                      i represents the predicted observation vector corresponding to the i − th ensemble member.
+
+
+               2.3.3. Multiple Data Assimilation Steps
+
+               Let d be the actual observed data and R the observation error covariance matrix. Consider the case R = σ2obs I,
+               where σobs is the standard deviation of the observation error and I is the identity matrix.
+               ES–MDA updates the parameter ensemble in multiple steps l = 1, ..., Na . In each step, the observation error
+               covariance is inflated by a factor αl , ensuring:
+
+                                                                   Na
+                                                                       1
+                                                                   ∑     =1                                                       (14)
+                                                                      α
+                                                                   l=1 l
+
+
+
+
+GONG AND ZHA                                                                                                                   8 of 35
+                                                                                                                                        19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                               10.1029/2025WR040040
+
+
+
+               At the beginning of the l − th step, an updated parameter ensemble {x(li − 1) } and its corresponding predicted
+
+               observations {d(li − 1) } from the forward model are available:
+
+                                                                        1)          1)
+                                                                   d(l−
+                                                                    i      = F(x(l−
+                                                                                i      )                                        (15)
+
+
+               Define the ensemble means:
+
+
+                                                                 ⎧
+                                                                 ⎪
+                                                                 ⎪  (l− 1)   1 Ne (l− 1)
+                                                                 ⎪
+                                                                 ⎪ x       =    ∑x
+                                                                 ⎪
+                                                                 ⎨           Ne i=1 i
+                                                                                                                                (16)
+                                                                 ⎪
+                                                                 ⎪
+                                                                 ⎪
+                                                                 ⎪  (l− 1)   1 Ne (l− 1)
+                                                                 ⎪
+                                                                 ⎩d        =    ∑d
+                                                                             Ne i=1 i
+
+               The cross–covariance between parameters and predicted observations and the covariance of the predicted ob-
+               servations are computed as:
+
+                                                                 Ne
+                                             ⎧
+                                             ⎪
+                                             ⎪  (l− 1)     1           (l− 1)    (l− 1)      (l− 1)     (l− 1) T
+                                             ⎪
+                                             ⎪ C       =        ∑   (x        − x       ) (d        − d       )
+                                             ⎪
+                                             ⎨  xd
+                                                         Ne − 1 i=1    i                     i
+
+                                                                                                                                (17)
+                                             ⎪
+                                             ⎪                   Ne
+                                             ⎪
+                                             ⎪ (l− 1)      1           1)     (l− 1)         1)    (l− 1) T
+                                             ⎪
+                                             ⎩Cdd =             ∑(d(l−
+                                                                    i     − d        ) (d(l−
+                                                                                         i      − d      )
+                                                         Ne − 1 i=1
+
+
+               To incorporate the actual observations at step l, perturbed observations d + εil are generated, where εil N(0, αl R) .
+               Using these perturbed observations, the parameter update formula for each ensemble member is:
+
+                                                   (l− 1)        1) (l− 1)              − 1
+                                                                                         (l− 1)
+                                             x(l)
+                                              i = xi      + C(l−                     l
+                                                             xd ( Cdd + αl R) (d + εi − di      )                               (18)
+
+
+               2.3.4. Final Estimation
+
+               After executing all Na assimilation steps, the ensemble {x(N
+                                                                         i
+                                                                           a)
+                                                                              } provides realizations that have been adjusted
+               through a sequence of updates informed by the observed data. The final estimation can then be calculated by
+               taking the mean value of these realizations:
+
+                                                                              1 Ne (Na )
+                                                                   x(Na ) =      ∑x                                             (19)
+                                                                              Ne i=1 i
+
+
+               3. Experimental Setup
+               3.1. Basic Setup
+               3.1.1. Problem Setup
+
+               In this study, we conducted a series of numerical experiments, focusing on a 1D vertically heterogeneous soil
+               profile. The ln K s was modeled as a stochastic field with 100 parameters, and the physical domain was discretized
+               into 100 evenly spaced points, spanning from z = 0 to z = − 99 cm. This discretization ensures consistency in
+               integrating the stochastic field across both the PINN and numerical methods.
+
+               As previously mentioned, the hydraulic parameters, except for K s , were assumed uniform and known, as detailed
+               in Table 2. The reference ln K s was generated using a series of random coefficients sampled from a Gaussian
+               distribution and the KLE, with the geostatistical prior specified by a mean μ, variance σ2ln Ks , and correlation
+               length η. The truncation number Nkl was set to 9 to ensure that the truncated KLE retained over 95% of the
+               heterogeneity.
+
+
+GONG AND ZHA                                                                                                                  9 of 35
+                                                                                                                                                               19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                  Water Resources Research                                                  10.1029/2025WR040040
+
+
+
+Table 2                                                                     For the uBC, a constant precipitation rate of 1 cm/d was imposed over a 10–
+Soil Properties in the Basic Experimental Setup                             day period, uniformly discretized into 101 time steps. The initial condition
+                                                                            (IC) for matric potential ψ was set to − 50 cm across the entire soil column. In
+Items                                                         Values
+                                                                            generating the reference solutions, we adopted a free drainage condition at the
+θr                                                             0.078        lower boundary (∂ψ / ∂ z = 0 at z = − 99 cm).
+θs                                                             0.43
+                                                                            While free drainage is a commonly used idealization, we acknowledge that
+α                                                          0.036 [cm− 1]
+                                                                            the extent to which this condition is perfectly met in practice can be influ-
+n                                                              1.56         enced by factors such as the magnitude of uBC flux, soil heterogeneity, and
+μln K s                                                    3.0 ln[cm/d]     the depth of the simulated domain. Verifying the free drainage assumption
+σ 2ln K s                                                       3.0         helps bring the numerical examples closer to the real–world scenarios.
+                                                                            However, since the PINN approach in this study does not enforce the free
+η                                                             50 [cm]
+                                                                            drainage assumption, minor deviations from a perfect free drainage condition
+                                                                            at the boundary have a limited impact on the overall training and predictive
+                                                                            performance of the model.
+
+                                        All reference solutions were generated using HYDRUS–1D (Simunek et al., 2005) with accurate IC, BCs and soil
+                                        hydraulic parameters, as described in Appendix C. A random realization of ln K s from the KLE, along with its
+                                        corresponding ψ, K, and θ fields, is also shown in Appendix C.
+
+
+                                        3.1.2. Implementation Details
+                                        A key advantage of PINNs is their ability to implement physical constraints through collocation points—spatial
+                                        and temporal locations where the governing PDE needs to be satisfied without requiring any labeled data. Unlike
+                                        observation points that provide direct measurements, collocation points can be placed anywhere within the
+                                        computational domain and resampled dynamically. To ensure that the RRE is satisfied throughout the entire
+                                        spatiotemporal domain, a sufficiently large number of collocation points is typically required. However, main-
+                                        taining a fixed large set of collocation points throughout training can be computationally expensive. A widely
+                                        adopted strategy to address these challenges is dynamic resampling (Wu et al., 2023). Following this approach,
+                                        we uniformly resample 4000 collocation points at each training iteration.
+                                        For the inverse problem setup, we aim to estimate the unknown ln K s field of the heterogeneous soils from θ
+                                        observations. Observation points were uniformly distributed in the spatial domain, with a spacing of 18 cm,
+                                        ranging from z = − 5 cm to z = − 95 cm, totaling 6 spatial points. In the temporal domain, observations were
+                                        recorded at intervals of 0.1 days from t = 0 to t = 10 days, resulting in 101 time points. Thus, there were 606
+                                        observation points in the spatiotemporal domain.
+
+                                        To simulate realistic conditions, noise sampled from a normal distribution was added to the observed data to form
+                                        the PINN training data set. The noisy observational data is defined as:
+
+                                                                            θ∗ ( tobs  obs       obs obs
+                                                                                  i , zi ) = θ( ti , zi ) + σ obs N(0, 1)                              (20)
+
+                                        where θ∗ ( tobs  obs                                              obs obs
+                                                    i , zi ) represents the noisy observational data, θ( ti , zi ) is the reference solution of θ at obser-
+                                        vation points, and θ( tobs  obs
+                                                               i , zi ) is the noise sampled from a normal distribution with a mean of zero and standard
+                                        deviation of σ = 0.005. This setup aligns with the experimental designs of Bandai and Ghezzehei (2021) and
+                                        Wang, Shi, et al. (2023).
+                                        From the DL perspective, KLE–PINN–EC and KLE–PINN–BT can be viewed as an extension of KLE–PINN or
+                                        KLE–PINN–C, in which the standard, single network is split into two subnetworks. In KLE–PINN–EC, these two
+                                        subnetworks are combined via a dot product (plus a learnable bias; see Equation A4), acting as an “additional
+                                        layer” that produces the final output. By contrast, KLE–PINN–BT employs the same branch–trunk structure but
+                                        does not explicitly couple parameter features and states.
+                                        In our experimental setup, each subnetwork in KLE–EC–PINN and KLE–PINN–BT is implemented as a four–
+                                        layer fully–connected network of size {Nin, 64, 64, 64, 16}. To ensure that performance differences reflect
+                                        architectural design rather than disparate model capacity, we matched the total number of trainable parameters
+                                        across all variants as closely as possible. Consequently, KLE–PINN and KLE–PINN–C were each configured
+
+
+GONG AND ZHA                                                                                                                                       10 of 35
+                                                                                                                                        19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                       10.1029/2025WR040040
+
+
+               with five layers {Nin, 81, 81, 81, 81, 1}. This yields the following trainable parameter counts: KLE–PINN: 20746,
+               KLE–PINN–C: 22933, KLE–PINN–BT: 19498, KLE–PINN–EC: 20394. Such a setup ensures that observed
+               performance variations can be attributed primarily to the architectural distinctions—namely, how the networks
+               incorporate or couple the parameter features e(zi ) —rather than to differences in the overall complexity of the
+               models.
+               In the implementation, the hyperbolic tangent (Tanh) function was employed as the activation function for both
+               neural networks. The hyperparameters λphysics and λdata in the loss function (Equation 10) were set to 1.0 and 0.1,
+               respectively. Xavier initialization (Glorot & Bengio, 2010) was applied to the network weights, while the
+               trainable coefficients ξ̂(τ) in KLE (Equations 4 and 5) were initialized to 0, meaning that the network predicted
+               ln K̂ s as the prior mean value before training. All PINN variants were optimized using the Adam optimizer
+               (Kingma & Ba, 2017) for 100000 iterations with a learning rate of 0.001. To ensure stable and efficient training,
+               all inputs were normalized using min–max normalization, as described in Equation 21, where the input is scaled
+               from its original range to [− 1,1].
+
+                                                                   input − min(input)
+                                                    input∗ = 2                           − 1                                    (21)
+                                                                 max(input) − min(input)
+
+               For the ES–MDA, an ensemble size of 100 and 50 assimilation steps were used. The scaling factor αl in
+               Equation 18 was held constant during each assimilation step to satisfy Equation 14. The ES–MDA imple-
+               mentation was performed using the pyESMDA package (Collet, 2023), coupled with Phydrus as the forward
+               model for Equation 13. Phydrus provides a Python interface to the HYDRUS FORTRAN code (Collenteur
+               et al., 2020), facilitating seamless integration between the two environments.
+               All PINN models were trained on a single NVIDIA GeForce RTX 4070 Super GPU, while HYDRUS–1D and
+               ES–MDA computations were executed on a 13th Gen Intel® Core™ i9–13900HX CPU. The computational
+               environment included Python 3.8.20 and PyTorch 2.4.1. The computational times for single implementations
+               were approximately: 31 min for KLE–PINN, 34 min for KLE–PINN–C, and 46 min each for KLE–PINN–BT and
+               KLE–PINN–EC. ES–MDA required 28 min per implementation. These times are dependent on factors such as the
+               number of trainable parameters, network structures, ensemble sizes, and training/iteration steps, and may vary
+               under different configurations. To assess the reproducibility and stability of the models, all experiments were
+               repeated five times.
+
+
+               3.2. Evaluation Metrics
+
+               To evaluate the model performance, three metrics were employed: the root mean square error (RMSE), the
+               coefficient of determination (R2), and the standard deviation (SD), which are defined as follows:
+
+                                                         ⎧
+                                                         ⎪
+                                                         ⎪         √̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅
+                                                         ⎪
+                                                         ⎪         √ N
+                                                         ⎪
+                                                         ⎪         √1
+                                                         ⎪
+                                                         ⎪                                     2
+                                                         ⎪
+                                                         ⎪ RMSE  =           ∑ ( y − ŷi )
+                                                         ⎪
+                                                         ⎪              N i=1 i
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪           N                     2
+                                                         ⎨ 2      ∑i=1 ( yi − ŷi )
+                                                           R =1−      N                   2                                     (22)
+                                                         ⎪
+                                                         ⎪         ∑i=1 ( yi − y)
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪      √̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅
+                                                         ⎪
+                                                         ⎪      √ M
+                                                         ⎪
+                                                         ⎪      √1
+                                                         ⎪
+                                                         ⎪ SD = √ ∑ (x − x)2
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪
+                                                         ⎪         M j=1 j
+                                                         ⎪
+                                                         ⎪
+                                                         ⎩
+
+
+               where yi and ŷi represent the reference and predicted values, respectively; y denotes the mean of the reference
+               values, and N is the total number of evaluation points. For the SD, xj represents the metric value (e.g., RMSE or
+               R2) in the j − th experimental repetition; x is the average of these values, and M is the total number of repetitions.
+
+               The RMSE measures the average magnitude of the difference between predicted and reference values, with lower
+               values indicating higher accuracy. The R2 quantifies the proportion of variance in the reference values that is
+
+
+GONG AND ZHA                                                                                                                11 of 35
+                                                                                                                                                                    19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                 Water Resources Research                                                      10.1029/2025WR040040
+
+
+
+Table 3                                                                         captured by the predictions, with a value closer to 1 indicating better agree-
+Experimental Design for Different KLE Realizations: Group A: Baseline           ment. The SD evaluates the variability of the model performance across
+Configuration; Groups B–C: Varied Random Coefficients; Groups D–E:              multiple repetitions, with lower values reflecting higher stability. Ideally, the
+Different Variances; Groups F–G: Different Correlation Lengths                  optimal model performance corresponds to a low RMSE, an R2 value
+Groups                 σ 2ln K s       η             Nkl               γ        approaching 1, and a minimal SD.
+
+A (Baseline)              3           50                  9        0.9526
+B (ξ1 )                   3           50                  9        0.9526       4. Results and Discussion
+C (ξ2 )                   3           50                  9        0.9526       4.1. Algorithm Robustness
+D (σ2ln K s = 2)          2           50                  9        0.9526
+                                                                                A primary question motivating this study is whether combining KLE and
+E (σ2ln K s = 4)          4           50                  9        0.9526       PINN can effectively handle the combined effect of heterogeneous soil pa-
+F (η = 60)                3           60                  8        0.9553       rameters and uncertain uBC. To address this, we conducted a series of tests
+                                                                                focusing on two aspects: (a) how PINNs perform across various KLE re-
+G (η = 40)                3           40             11            0.9520
+                                                                                alizations, and (b) how sensitive they are to inaccuracies in the geostatistical
+                                                                                priors (i.e., variance and correlation length).
+
+                                      4.1.1. Variability in KLE Realizations
+                                      To assess model robustness under diverse heterogeneity conditions, we generated multiple KLE realizations that
+                                      varied in random coefficients, parameter variances, and correlation lengths (Table 3). We then evaluated four
+                                      KLE–PINN variants under these scenarios, Table 4 and Figure 3 summarize the results.
+                                      Overall, KLE–PINN, KLE–PINN–BT and KLE–PINN–EC exhibit consistently strong performance across all
+                                      test scenarios. This confirms that integrating KLE with PINN can effectively capture soil parameter heterogeneity
+                                      under diverse conditions, even when challenged by uncertain uBC. As expected, increasing parameter variance or
+                                      decreasing correlation length (both indicators of heightened heterogeneity) lead to declines in accuracy. However,
+                                      R2 values remain high with low RMSE and SD, indicating robust predictive capability.
+                                      Interestingly, KLE–PINN–C shows notably poorer performance compared to the baseline KLE–PINN. This
+                                      finding validates our hypothesis that naive parameter incorporation through direct concatenation may introduce
+                                      optimization difficulties. This underscores the importance of thoughtful integration strategies when combining
+                                      data–driven and physics–based components.
+
+
+
+                                       Table 4
+                                       Performance Comparison of PINNs Across Different KLE REALIZATIONS: COMPARATIVE Results for Groups A–G as
+                                       Defined in Table 3, Evaluating Model Performance Under Baseline (A), Varied Random Coefficients (B–C), Different
+                                       Variances (D–E), and Varied Correlation Lengths (F–G)
+                                       Groups                 Metrics (10− 2)       KLE–PINN          KLE–PINN–C          KLE–PINN–BT           KLE–PINN–EC
+                                       A (Baseline)               R2               90.01 ± 0.57        78.05 ± 1.42         90.34 ± 0.84         92.45 ± 0.48
+                                                                  RMSE             31.78 ± 0.91        47.11 ± 1.52         31.26 ± 1.35         27.62 ± 0.88
+                                       B (ξ1 )                    R2               98.11 ± 0.56        97.33 ± 0.27         98.02 ± 0.53         99.02 ± 0.40
+                                                                  RMSE             10.91 ± 1.66        12.98 ± 0.66         11.18 ± 1.51           7.85 ± 1.43
+                                       C (ξ2 )                    R2               91.80 ± 0.48        77.43 ± 3.95         90.66 ± 0.20         94.28 ± 0.40
+                                                                  RMSE             19.20 ± 0.55        31.86 ± 2.94         20.49 ± 0.22         16.04 ± 0.55
+                                       D (σ2ln K s = 2)           R2               91.95 ± 0.45        79.69 ± 1.70         91.86 ± 0.45         94.21 ± 0.64
+                                                                  RMSE             23.29 ± 0.64        37.00 ± 1.54         23.43 ± 0.64         19.75 ± 1.07
+                                       E (σ2ln K s = 4)           R2               88.30 ± 0.21        76.50 ± 1.17         89.22 ± 0.65         90.42 ± 0.37
+                                                                  RMSE             39.72 ± 0.35        56.28 ± 1.41         38.11 ± 1.15         35.94 ± 0.69
+                                       F (η = 60)                 R2               90.35 ± 0.29        81.01 ± 1.05         91.63 ± 0.34         92.67 ± 0.53
+                                                                  RMSE             29.15 ± 0.44        40.88 ± 1.13         27.15 ± 0.56         25.40 ± 0.91
+                                       G (η = 40)                 R2               89.51 ± 0.46        72.09 ± 1.56         91.19 ± 0.63         89.88 ± 0.59
+                                                                  RMSE             35.66 ± 0.78        58.17 ± 1.59         32.68 ± 1.13         35.03 ± 1.03
+
+
+
+GONG AND ZHA                                                                                                                                           12 of 35
+                                                                                                                                                                                 19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                    Water Resources Research                                                               10.1029/2025WR040040
+
+
+
+
+Figure 3. Comparison of inversion results from KLE–PINN (dark blue), KLE–PINN–C (green), KLE–PINN–BT (light blue) and KLE–PINN–EC (red) against the
+reference ln K s (black) for various KLE realizations: (a, b) Random Coefficient 1; (c, d) Random Coefficient 2; (e, f) Variance = 2; (g, h) Variance = 4; (i, j) Correlation
+Length = 60; (k, l) Correlation Length = 40.
+
+                                            4.1.2. Effect of Incorrect Prior
+                                            In practice, geostatistical priors such as variance and correlation length are often estimated from limited data, thus
+                                            introducing uncertainty. To evaluate the impact of inaccuracies in these priors, we introduced deliberate errors in
+                                            their values and observed how PINNs responded during inversion.
+                                            Figure 4 compares the results for KLE–PINN, KLE–PINN–C, KLE–PINN–BT, and KLE–PINN–EC under
+                                            incorrect prior assumptions. Although prior deviations lead to some performance fluctuations, the overall impact
+                                            is moderate. Remarkably, even in the worst cases, all models except KLE–PINN–C achieve R2 values near or
+                                            above 0.90, demonstrating practical robustness for field applications where precise geostatistical parameters are
+                                            rarely available.
+                                            Consistent with N. Wang et al. (2021a) in groundwater studies, errors in correlation length exert a more pro-
+                                            nounced effect than those in variance. This occurs because correlation length determines the effective dimen-
+                                            sionality (i.e., how many KLE modes are required to capture >95% of the parameter variability), whereas
+                                            variance primarily rescales the eigenfunctions and eigenvalues without altering the number of KLE terms needed.
+                                            Consequently, a mismatch in correlation length can impede the reconstruction of the parameter field, resulting in
+                                            larger drops in accuracy.
+
+                                            In summary, these tests provide strong evidence that the KLE–PINN framework can successfully address the dual
+                                            challenges of soil heterogeneity and uncertain boundary in unsaturated flow modeling. However, the poor per-
+                                            formance of the direct coupling approach (KLE–PINN–C) highlights that successful learning of parameter–state
+                                            relationships requires careful consideration, rather than simply adding additional inputs.
+
+
+
+
+GONG AND ZHA                                                                                                                                                          13 of 35
+                                                                                                                                                                19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                  Water Resources Research                                                    10.1029/2025WR040040
+
+
+
+
+Figure 4. Performance comparison of KLE–PINN (dark blue), KLE–PINN–C (green), KLE–PINN–BT (light blue) and KLE–PINN–EC (red) under incorrect
+geostatistical priors: (a–d): R2 comparison; (e–h) RMSE comparison.
+
+
+                                         4.2. Effect of Observation Points
+                                         Having established the robustness of KLE–PINN variants under diverse heterogeneity conditions, we now turn to
+                                         the second research question: How does observational data quality and quantity affect model performance? In
+                                         real–world applications, hydraulic measurements are often sparse and contaminated by sensor noise. This section
+                                         examines whether the enhanced coupling strategy in KLE–PINN–EC provides tangible benefits under such
+                                         challenging observational conditions. We systematically vary observation density (Table 5) and noise levels
+                                         (σobs = 0 to σobs = 0.02) to evaluate model performance.
+                                         Figure 5 reveals a clear relationship between observation density and model performance. As expected, reducing
+                                         the number of observation points generally leads to lower R2, higher RMSE and SD for all models. However, the
+                                         rate and pattern of degradation differ significantly among variants. With sufficient observations (≥6 points),
+                                         KLE–PINN, KLE–PINN–BT and KLE–PINN–EC maintain high accuracy (R2 > 0.9, RMSE < 0.4 with low
+                                         SDs). Although slight performance variations exist, the gap among them remains small. Notably, KLE–PINN–C
+                                         performs worse than the baseline KLE–PINN at 7, 6, and 3 observation points, which aligns with our hypothesis
+                                         that simply appending parameter features as additional inputs may not be effective.
+
+                                         The distinction becomes pronounced under sparse observation conditions (<6 points). KLE–PINN–EC demon-
+                                         strates superior resilience to data scarcity, maintaining R2 = 0.4807 with only 3 observation points—nearly double
+                                         the performance of KLE–PINN (R2 = 0.2630) and KLE–PINN–BT (R2 = 0.2727). Interestingly, KLE–PINN–C,
+                                         despite its generally poor performance, shows unexpected competitiveness (close to KLE–PINN–EC) at 4
+                                         observation points, suggesting that explicit parameter information can be beneficial in data scarce scenarios.
+                                         The consistent similarity between KLE–PINN and KLE–PINN–BT across all observation conditions warrants
+                                         explanation. This suggests that changing the DL framework alone, without parameter–state coupling, provides
+                                         minimal advantage for parameter inference under sparse observations. The true benefit emerges only when
+                                                                            explicit coupling mechanisms are introduced, as in KLE–PINN–EC, enabling
+ Table 5                                                                    the model to effectively extract information from limited data.
+ Experimental Setup for Spatial Observation Points and Their Depths
+                                                                                  A counterintuitive finding emerges from our noise sensitivity analysis:
+ Number of spatial observation points    Depth of observation points (cm)         moderate noise levels slightly improve inversion accuracy compared to
+ 3                                                 − 5, − 50, − 95                noise–free conditions, as evidenced by higher R2 values and reduced RMSE
+ 4                                              − 5, − 35, − 65, − 95             (Figures 5c and 5d). This phenomenon can be understood through the lens of
+                                                                                  PINN's dual–objective optimization. Figure 6 illustrates that as noise in-
+ 6 (Baseline)                             − 5, − 23, − 41, − 59, − 77, − 95
+                                                                                  creases, the data loss rises by approximately two orders of magnitude while
+ 7                                      − 5, − 20, − 35, − 50, − 65, − 80, − 95
+                                                                                  the physics loss remains stable. This finding aligns with earlier studies
+
+
+GONG AND ZHA                                                                                                                                        14 of 35
+                                                                                                                                         19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                        10.1029/2025WR040040
+
+
+
+
+               Figure 5. Performance comparison of KLE–PINN (dark blue), KLE–PINN–C (green), KLE–PINN–BT (light blue) and
+               KLE–PINN–EC (red) under different numbers of spatial observation points and observation noises: (a) R2 comparison with
+               different observation points, (b) RMSE comparison with different observation points, (c) R2 comparison with different
+               observation noises, (d) RMSE comparison with different observation noises.
+
+               indicating that improved MLP architectures facilitate more stable learning of physics terms (S. Wang et al., 2021,
+               2022), thus bolstering their resilience to noise interference. Nevertheless, it should be stressed that noise is not
+               inherently beneficial; rather, these results underscore the robustness of both models under low and moderate noise
+               conditions.
+               To ensure that KLE–PINN–EC's superior performance under data scarcity is not an artifact of architectural
+               choices or hyperparameter settings, we conducted comprehensive sensitivity analyses (detailed in Appendix D).
+               These experiments explored various network configurations for the baseline models while maintaining compa-
+               rable parameter counts. Across all tested architectures, KLE–PINN–EC consistently outperformed the alterna-
+               tives, confirming that its advantages stem from the fundamental coupling strategy rather than implementation
+               specifics.
+
+               In summary, our results underscore a critical finding: the successful learning of parameter–state relationships
+               requires more than simply combining neural networks with a PDE–based loss term. The key lies in thoughtfully
+               designing how physical parameters and state variables interact within the DL framework. The enhanced coupling
+               strategy exemplified by KLE–PINN–EC demonstrates that explicitly encoding these relationships, rather than
+               relying on the network to discover them implicitly, is essential for extracting meaningful insights from the sparse
+               and noisy data typical of field conditions.
+
+
+
+
+GONG AND ZHA                                                                                                                  15 of 35
+                                                                                                                                                            19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                              Water Resources Research                                                    10.1029/2025WR040040
+
+
+
+
+Figure 6. Training loss evolution for PINNs under different observation noise levels: (a) KLE–PINN, (b) KLE–PINN–C, (c) KLE–PINN–BT, (d) KLE–PINN–EC. The
+blue lines represent data loss, while the red lines represent physics loss. All results are shown on a logarithmic scale.
+
+                                      4.3. Combined Parameter and BC Uncertainties
+                                      Building on the demonstrated robustness of KLE–PINN–EC under heterogeneous conditions (Section 4.1) and
+                                      sparse observations (Section 4.2), we now turn to the third research question: Does the ability of KLE–PINN–EC
+                                      to perform parameter inversion without explicit BCs confer a tangible advantage over traditional DA methods in
+                                      heterogeneous soils? Specifically, two scenarios are considered: (a) fixed uBCs, where the uBC is treated as
+                                      known and is not updated, and (b) invertible uBCs, in which ES–MDA attempts to estimate the boundary flux
+
+
+GONG AND ZHA                                                                                                                                     16 of 35
+                                                                                                                                                                  19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                Water Resources Research                                                      10.1029/2025WR040040
+
+
+
+Table 6                                                                    jointly with the soil parameters. As noted earlier, the PINN approach does not
+Experimental Setup for Incorrect Time–Dependent uBC: Flux Values With      require any BC or IC information as input; thus, these tests are designed to
+10% and 20% Errors, Where Negative Values Represent Precipitation and      assess whether the BC–free nature of KLE–PINN–EC translates into a
+Positive Values Represent Evaporation                                      practical advantage.
+                                       Flux [cm/d]
+Time [d]            Correct            10% error             20% error     4.3.1. Effect of Incorrect BC
+0.5                 − 3                 − 3.3                 − 3.6        In practical applications, observational errors and simplifications can lead to
+2.5                   0.06                0.054                 0.048      discrepancies between the prescribed and the true boundary fluxes. To
+3                   − 3                 − 2.7                 − 2.4        examine how such errors affect model performance, we artificially imposed
+5                     0.06                0.066                 0.078      ±10% and ±20% deviations in the uBCs. Two boundary types were tested: (a)
+5.5                 − 3                 − 3.3                 − 3.6
+                                                                           Constant Flux: The true uBC flux is set to 1.0 cm/d. A ±10% error thus results
+                                                                           in 0.9 cm/d or 1.1 cm/d, whereas a ±20% error yields 0.8 cm/d or 1.2 cm/d.
+7.5                   0.06                0.054                 0.048
+                                                                           (b) Time–Dependent Flux: A repeating 2.5–day cycle is imposed, with flux of
+8                   − 3                 − 2.7                 − 2.4        − 3 cm/d for 0.5 days, followed by flux of +0.06 cm/d for 2 days. This cycle is
+10                    0.06                0.066                 0.078      repeated four times over a 10–day simulation period. For each cycle, ±10%
+                                                                           and ±20% deviations are similarly introduced (Table 6).
+                                     Figure 7 compares the resulting R2 and RMSE values, for ES–MDA and KLE–PINN–EC under both boundary
+                                     types. When the uBC is correctly specified, ES–MDA's accuracy is comparable to KLE–PINN–EC (e.g.,
+                                     R2 > 0.9, RMSE < 0.3). However, once a systematic error is introduced under the constant–flux condition, ES–
+                                     MDA's performance exhibits significant degradation: R2 drops from 0.9818 to 0.0673, and RMSE rises from
+
+
+
+
+                                     Figure 7. Performance comparison of KLE–PINN–EC (red dashed lines, without BC inputs) and ES–MDA under prescribed
+                                     uBCs. The figure evaluates prescribed constant–flux uBCs (cyan–green bars) and prescribed time–dependent uBCs (purple
+                                     bars): (a, b) compare R2 across different uBC error levels, while (c, d) compare RMSE. The light gray area represents uBCs
+                                     with 10% error, and the dark gray area represents uBCs with 20% error.
+
+
+GONG AND ZHA                                                                                                                                           17 of 35
+                                                                                                                                                       19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                        10.1029/2025WR040040
+
+
+
+                Table 7
+                Experimental Design for Joint Inversion of ln K s and uBC Under Varying Levels of uBC Uncertainty
+                uBC types                        Timing of events                 Scenarios                      Priors of uBCs
+                Constant                                 /                           S1                    fluxcorrect ± 0.1fluxcorrect
+                                                                                     S2                    fluxcorrect ± 0.2fluxcorrect
+                Time–Dependent                        Known                          S3                fluxcorrect (ti ) ± 0.1fluxcorrect (ti )
+                                                                                     S4                fluxcorrect (ti ) ± 0.2fluxcorrect (ti )
+                                           Unknown (Avg. Flux Based)                 S5                fluxcorrect (ti ) ± 0.1fluxcorrect (ti )
+                                                                                     S6                fluxcorrect (ti ) ± 0.2fluxcorrect (ti )
+                                           Unknown (Rain/Evap. Prior)                S7               ±fluxcorrect (ti ) ± 0.1fluxcorrect (ti )
+                                                                                     S8               ±fluxcorrect (ti ) ± 0.2fluxcorrect (ti )
+                Note. Scenarios S1, S3, S5, and S7 assume 10% prior errors, while S2, S4, S6, and S8 assume 20% prior errors.
+
+
+               0.1342 to 0.9706. The growing SD indicates that the assimilation updates become increasingly unstable as the
+               flux deviates further from its true value. In the time–dependent uBC scenario, a similar degradation occurs under
+               flux errors; notably, even the correct time–dependent flux exhibits somewhat lower overall accuracy than the
+               correct constant flux, reflecting the added complexity of dynamic forcing.
+               This performance degradation in ES–MDA can be attributed to linear (or near–linear) update assumptions
+               (Emerick & Reynolds, 2013). Time–dependent uBCs amplify the nonlinearity between parameters and obser-
+               vations, making it more difficult for ES–MDA to capture complex system responses. More critically, once the
+               boundary flux deviates from its true value, the forward model introduces a structural error that gets propagated
+               through each assimilation step, compounding inaccuracies in the parameter updates (Doherty & Welter, 2010;
+               Erdal et al., 2014; Q. Zhang et al., 2019).
+
+               By contrast, KLE–PINN–EC does not require any explicit uBC specification. Because the RRE is embedded
+               directly in its loss function, KLE–PINN–EC is less susceptible to both the linearity assumptions of ES–MDA and
+               the risk of being systematically misled by an erroneous boundary flux. Consequently, it maintains more stable
+               performance even when the uBC would be inaccurately prescribed in traditional methods.
+
+               4.3.2. Effect of Invertible BC
+               Having demonstrated the vulnerability of ES–MDA to fixed BC errors, we next explore whether joint parameter–
+               boundary inversion can mitigate these limitations. Joint inversion, where ES–MDA estimates both soil hydraulic
+               parameters and uBC simultaneously, has the potential to correct systematic biases (Hendricks Franssen &
+               Kinzelbach, 2008; Liu & Gupta, 2007). To comprehensively assess ES–MDA's capability in this context, we
+               designed eight scenarios with increasing levels of uBC uncertainty.
+               Table 7 summarizes these scenarios, which are categorized into three groups based on the nature of uBC un-
+               certainty: (a) Constant flux with errors (S1, S2): ES–MDA inverts the boundary flux, starting from an initial flux
+               mismatch. (b) Time–dependent flux with known timing (S3, S4): The timing of rainfall or evaporation events is
+               assumed correct, but flux magnitudes are biased. (c) Time–dependent flux with unknown timing (S5–S8): Both
+               flux magnitude and timing are uncertain. Here, we consider two different prior assumptions: (3.1) Average flux–
+               based prior (S5, S6): Each ensemble member is initialized with perturbations around +0.552 cm/d (the true
+               temporal average), representing a scenario where only evaporation is expected throughout the simulation period.
+               (3.2) Alternating rain/evaporation prior (S7, S8): Each ensemble member is initialized with perturbations around
+               ±0.552 cm/d, representing a more realistic prior assumption that rainfall and evaporation events alternate over
+               time.
+                                                                                                                                            Ne
+               In the joint inversion framework, the input vector to each ES–MDA ensemble member (denoted as {x(0)
+                                                                                                               i }                                 )
+                                                                                                                                            i =1
+               includes both ln K s and uBC flux, which is either a constant value flux or a time–dependent series flux(ti ) . The
+               ensemble size remains at 100 members, with computational time approximately 28 min. Figure 8 presents the
+               overall performance comparison, while Table 8 and Figure 9 provide detailed results for time–dependent
+               scenarios.
+
+
+GONG AND ZHA                                                                                                                          18 of 35
+                                                                                                                                                                   19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                               Water Resources Research                                                        10.1029/2025WR040040
+
+
+
+
+                                        Figure 8. Performance comparison of KLE–PINN–EC (red dashed lines, under time–dependent BC and without BC inputs)
+                                        and ES–MDA under invertible uBCs. Invertible constant–flux uBCs (cycan–green bars) and invertible time–dependent
+                                        uBCs (purple bars): (a, b) R2 comparison across different uBC types; (c, d) RMSE comparison. The light gray area denotes
+                                        uBCs with 10% error, while the dark gray area denotes uBCs with 20% error.
+
+
+                                        For scenarios with well–constrained uBC prior (S1–S4), ES–MDA demonstrates robust performance (Figures 8a
+                                        and 8c). In constant flux scenarios (S1, S2) and time dependent scenarios with known timing (S3, S4), the method
+                                        successfully corrects boundary flux errors, achieving R2 > 0.9 for both flux reconstruction and water content
+                                        prediction (Table 8; Figures 9a and 9d). This confirms that ES–MDA can effectively handle uBC uncertainties
+                                        when the error structure remains relatively simple and the uBC prior is reasonably accurate.
+
+                                                                              However, performance degrades substantially when both flux magnitude and
+                                                                              timing are uncertain. In scenarios S5–S6, ES–MDA shows poor performance
+Table 8                                                                       with negative R2 for both parameter estimation and flux reconstruction. This
+Performance Evaluation of ES–MDA Joint Inversion for Time–Dependent           performance degradation is further confirmed by the divergent RMSE evo-
+uBC (Scenarios S3–S8): Accuracy of Reconstructed uBC Flux and
+Corresponding Soil Moisture Predictions in HYDRUS–1D Simulations
+                                                                              lution shown in Appendix E (Figures E2a and E2b), where errors continue to
+                                                                              grow throughout the assimilation steps. Scenarios S7–S8 show a different
+                      R2 (10− 2)                    RMSE (10− 2)
+                                                                              pattern: while the estimated parameters and boundary fluxes are incorrect, the
+Scenarios     uBC flux        θ( tobs  obs
+                                  i , zi )      uBC flux      θ( tobs  obs
+                                                                  i , zi )    predicted water content remains acceptable, achieving reasonable R2 values
+S3           98.04 ± 0.38     95.26 ± 0.03    17.16 ± 1.48   0.62 ± 0.00      (R2 > 0.8). The contrasting performance between known–timing (S3–S4) and
+                                                                              unknown–timing scenarios (S5–S8) highlights the critical role of uBC prior
+S4           92.40 ± 0.86     95.14 ± 0.03    33.73 ± 1.84   0.63 ± 0.00
+                                                                              information for ES–MDA. When timing is uncertain, the model faces a dual
+S5          − 81.89 ± 4.61 − 50.60 ± 3.55    165.08 ± 2.09   3.49 ± 0.04
+                                                                              challenge: aligning predicted values with observations both in magnitude and
+S6          − 83.92 ± 9.52 − 50.59 ± 3.51    166.00 ± 4.22   3.49 ± 0.04      temporal sequence.
+S7           26.63 ± 7.24     80.54 ± 3.06   104.84 ± 4.10   1.25 ± 0.09
+                                                                              In scenarios S5 and S6, this misalignment introduces complex error structures
+S8           27.16 ± 8.77     80.84 ± 3.06   104.46 ± 4.97   1.24 ± 0.09
+                                                                              that may deviate from the Gaussian assumptions of ES–MDA (Emerick &
+
+
+GONG AND ZHA                                                                                                                                            19 of 35
+                                                                                                                                                                     19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                Water Resources Research                                                         10.1029/2025WR040040
+
+
+
+
+Figure 9. Comparison of ES–MDA inverted uBC flux (red solid lines) with reference flux (blue dashed lines) for time–dependent scenarios S3–S8: (a) S3 and (d) S4
+with known timing but biased magnitudes; (b) S5 and (e) S6 with unknown timing and average flux–based prior; (c) S7 and (f) S8 with unknown timing and alternating
+rain/evaporation prior.
+
+                                         Reynolds, 2013). Specifically, timing errors create discontinuous jumps in the error distribution as the model
+                                         attempts to match rainfall events occurring at incorrect times. These discontinuities can lead to error distributions
+                                         that deviate from Gaussian assumptions, potentially exhibiting heavy tails or multiple modes, which cannot be
+                                         adequately represented by the standard Kalman update equations. The nonlinearity of the Richards equation
+                                         further amplifies these effects, as small timing errors in boundary conditions propagate nonlinearly through the
+                                         soil profile (Zha et al., 2019).
+
+                                         Scenarios S7 and S8 reveal an interesting phenomenon that is consistent with the equifinality concept in hy-
+                                         drological modeling (Beven & Freer, 2001): the system achieves acceptable water content predictions despite
+                                         incorrect parameter and boundary flux estimates. This observation reflects the fundamental identifiability
+                                         problem in joint state–parameter estimation. As noted in earlier studies, when multiple error sources exist, DA
+                                         may incorrectly attribute model–observation discrepancies to parameter adjustments rather than state errors, or
+                                         vice versa (Drécourt et al., 2006; Hendricks Franssen & Kinzelbach, 2008). In our case, ES–MDA appears to find
+                                         compensating errors between parameter and boundary flux that minimize the observation mismatch. While this
+                                         produces seemingly acceptable predictions (“right answers”), it does so through incorrect physical representa-
+                                         tions (“wrong reasons”)—the compensating errors mask the true system behavior.
+                                         Our sensitivity analysis (Appendix E) confirms that these challenges are fundamental rather than technical—
+                                         neither increasing ensemble size nor modifying assimilation steps resolves the core issue. This suggests that
+                                         the problem lies in the mismatch between the method's assumptions and the actual error characteristics. While
+                                         advanced DA methods continue to evolve—including dual filtering approaches (Moradkhani et al., 2005),
+                                         iterative schemes (Gharamti et al., 2015), and machine learning augmentation (Q. Zhang et al., 2019; J. Zhang
+                                         et al., 2024)—these improvements typically require problem–specific tuning and may still face challenges with
+                                         strongly non–Gaussian errors and identifiability issues.
+                                         Our results suggest that KLE–PINN–EC and ES–MDA offer complementary strengths for different uncertainty
+                                         scenarios. ES–MDA remains highly effective when BCs are reasonably well–constrained or when prior infor-
+                                         mation about their structure is available. However, KLE–PINN–EC provides a valuable alternative for situations
+
+
+
+GONG AND ZHA                                                                                                                                              20 of 35
+                                                                                                                                    19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                   10.1029/2025WR040040
+
+
+               characterized by: (a) highly uncertain BCs with unknown error structures, (b) limited prior information about
+               atmospheric forcing patterns, and (c) strong nonlinearities that challenge Gaussian error assumptions. Rather than
+               viewing these methods as competitors, practitioners might consider them as complementary tools, with the choice
+               depending on the specific uncertainty characteristics of their application.
+
+               4.4. Limitations and Future Perspectives
+               This study presents a systematic investigation of integrating PINNs and KLE to simultaneously handle uncertain
+               uBC and soil parameter heterogeneity in unsaturated flow. While our results demonstrate the effectiveness of this
+               approach, several aspects warrant consideration for future advancement.
+
+               First, our analysis focused on 1D vertical flow and modeled heterogeneity solely through the saturated hydraulic
+               conductivity. These choices, while enabling rigorous methodological evaluation, naturally suggest opportunities
+               for extending the KLE–PINN–EC framework to higher–dimensional (2D or 3D) domains and incorporating
+               additional soil properties (such as porosity). Such extensions would enable a more comprehensive representation
+               of spatial heterogeneity and complex boundary interactions encountered in field–scale applications.
+               Second, while our results indicate that the proposed KLE–PINN–EC method can achieve improved accuracy
+               under relatively sparse observational data, scenarios with extremely limited measurements remain an important
+               practical challenge. In such cases, strategies for explicitly incorporating uncertain BCs as additional soft con-
+               straints could provide supplementary information to mitigate data scarcity. Investigating the optimal balance
+               between BC uncertainty quantification and minimal in situ observations represents an important direction for
+               enhancing the framework's practical applicability.
+               Third, this study employed the widely used VGM model (Mualem, 1976; Van Genuchten, 1980) with spatially
+               varying parameters to represent soil heterogeneity. Although the VGM model is well established, incorporating
+               more physically–based frameworks that couple the WRC and hydraulic conductivity function via concepts like
+               the Leverett J–function (Leverett, 1941) could enhance physical consistency. Rather than replacing the VGM
+               model, the J–function can serve as a scaling concept that preserves the underlying form of the chosen WRC while
+               adjusting its shape according to the local permeability and other factors (e.g., porosity). Future research could
+               explore such coupling to achieve a more physically consistent representation of hydraulic behavior.
+
+               These considerations highlight that the proposed KLE–PINN–EC framework provides a solid foundation that can
+               be further refined and extended, enhancing its applicability to complex real–world unsaturated flow problems.
+               The integration of higher–dimensional modeling, the development of strategies for severe data scarcity, and
+               implementation of more comprehensive constitutive relationships all represent valuable avenues for advancing
+               this methodology.
+
+               5. Conclusions
+               This study presents the integration of KLE and PINNs to address the dual challenges of soil parameter hetero-
+               geneity and BC uncertainty in unsaturated flow modeling. We systematically investigated three critical questions
+               that have remained unresolved:
+               1. Can the integration of KLE and PINN effectively handle the combined effect of soil parameter heterogeneity
+                  and uncertain uBC under the nonlinear constraints of the RRE?
+               2. Does the novel KLE–PINN–EC architecture with explicit parameter–state coupling offer tangible advantages
+                  over conventional KLE–PINN for reconstructing heterogeneous soil properties from sparse, noisy
+                  observations?
+               3. How does KLE–PINN–EC compare to a traditional DA method, ES–MDA, particularly when uBCs are
+                  uncertain?
+
+               Our key findings include:
+               1. Successful joint representation of heterogeneity and uncertain uBCs. Our results demonstrate that the KLE–
+                  PINN framework successfully handles both challenges simultaneously, even when the geostatistical priors
+                  contain moderate biases. However, the framework is more sensitive to errors in correlation length than
+                  variance, emphasizing the need for reasonably accurate spatial continuity characterization in field
+                  applications.
+
+
+GONG AND ZHA                                                                                                            21 of 35
+                                                                                                                                     19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                     10.1029/2025WR040040
+
+
+               2. Demonstrated benefit of explicit parameter–state coupling. KLE–PINN–EC shows clear superiority over
+                  standard KLE–PINN in data–scarce scenarios. Our ablation study reveals that this advantage stems from the
+                  synergistic effect of two design elements: (a) the explicit parameter–state coupling, and (b) the branch–trunk
+                  architecture that enables more efficient learning. Neither element alone achieves the full performance gain,
+                  highlighting the importance of their combined implementation.
+               3. Complementary performance with ES–MDA under boundary uncertainty. Our comparison reveals nuanced
+                  and complementary strengths between the two approaches. When boundary timing information is available
+                  and joint parameter–BC inversion is feasible, ES–MDA performs competitively with computational effi-
+                  ciency. However, ES–MDA experiences significant performance degradation when boundary timing is un-
+                  known. In contrast, KLE–PINN–EC maintains consistent performance across all uncertainty scenarios,
+                  demonstrating its robustness to complex error distributions and the equifinality problem that challenge joint
+                  inversion approaches.
+
+               Our findings suggest that traditional DA methods and physics–informed DL approaches offer complementary
+               tools for subsurface characterization. ES–MDA remains highly effective when prior information is reliable, while
+               the KLE–PINN–EC framework provides a more flexible and robust alternative for real–world applications where
+               BCs are poorly constrained and soil heterogeneity is pronounced. Future research should extend this approach to
+               more complex scenarios, such as multidimensional flow and the simultaneous modeling of multiple heteroge-
+               neous parameters. As climate variability increases uncertainty in atmospheric forcing and data availability re-
+               mains limited, hybrid approaches like KLE–PINN–EC will likely play an increasingly important role in
+               subsurface hydrology.
+
+
+               Appendix A: Structure of the Modified MLP
+               To address the gradient flow pathologies commonly observed in PINNs, Wang et al. (2021) proposed a modified
+               MLP structure. This architecture integrates two auxiliary layers (referred to as “encoders”) and dynamically
+               incorporates their outputs across the layers of the main network, thereby ensuring better gradient flow and
+               improving the overall performance of the model. The modified structure is defined as follows:
+
+
+                                             ⎧
+                                             ⎪
+                                             ⎪U = ϕ(Wu X + bu ), V = ϕ(Wv X + bv )
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪H(1) = ϕ( W(1) X + b(1) )
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎨
+                                              Z(l) = ϕ( W(l) H(l) + b(l) ), l = 1, ..., L − 1                                (A1)
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪H(l+1) = ( 1 − Z(l) ) ⊗ U + Z(l) ⊗ V, l = 1, ..., L − 1
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎪
+                                             ⎩f (X) = H(L) = W(L) H(l+1) + b(L)
+                                               Θ
+
+
+
+               Here X is the input; U and V are outputs from two auxiliary MLPs, parameterized by weights Wu , Wv and biases
+               bu , bv respectively. The activation function used in these layers is denoted as ϕ. H(1) denotes the initial hidden
+               state of the main network, and Z(l) represents the layer–specific intermediate representation, computed using H(l)
+               along with weights W(l) and biases b(l) .
+
+               The hidden state H(l + 1) combines information from U and V using Z(l) as a modulating factor. The term ⊗
+               represents the Hadamard product, defined as:
+
+                                                               (A ⊗ B)i = Ai · Bi                                            (A2)
+
+               where Ai and Bi are the i − th elements of vectors A and B. The final output fΘ (X) is computed from the output
+               layer H(L) through a linear transformation.
+
+               This structure can also be extended to the branch–trunk network paradigm, as introduced by S. Wang et al. (2022).
+               In this setting, the modified architecture is described as:
+
+
+
+
+GONG AND ZHA                                                                                                             22 of 35
+                                                                                                                                   19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                     Water Resources Research                                                     10.1029/2025WR040040
+
+
+
+                                     ⎧
+                                     ⎪
+                                     ⎪U = ϕ(Wu Xu + bu ), V = ϕ(Wv Xv + bv )
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪H(1) = ϕ( W(1)           (1)      (1)         (1)        (1)
+                                     ⎪
+                                     ⎪              u Xu + bu ), Hv = ϕ( Wv Xv + bv )
+                                     ⎪ u
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪Z(l)         (l) (l)     (l)     (l)        (l) (l)     (l)
+                                       u = ϕ( Wu Hu + bu ), Zv = ϕ( Wv Hv + bv ), l = 1, … , L − 1
+                                     ⎪
+                                     ⎨ (l+1)
+                                      Hu     = ( 1 − Z(l)                 (l)
+                                                         u ) ⊗ U + Zu ⊗ V, l = 1, … , L − 1                                (A3)
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪H(l+1)
+                                       v     = ( 1 − Z(l)                 (l)
+                                                         v ) ⊗ U + Zv ⊗ V, l = 1, … , L − 1
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪H(L) = ϕ( W(L)u Hu
+                                                         (l+1)
+                                                               + b(L)         (L)
+                                                                     u ), Hv = ϕ( Wv Hv
+                                                                                        (L) (l+1)
+                                                                                                   + b(L)
+                                                                                                      v )
+                                     ⎪ u
+                                     ⎪
+                                     ⎪
+                                     ⎪
+                                     ⎪                     (L)     (L)
+                                     ⎩GΘ (Xu ) (Xv ) = ⟨Hu , Hv ⟩ + β
+
+
+               Here, Xu and Xv are the inputs to the branch u and trunk v networks, respectively. U and V represent auxiliary
+               features extracted from Xu and Xv through isolated MLP encoders. H(l)       (l)
+                                                                                  u and Hv are the layer–wise hidden states
+               of the branch and trunk networks, while Z(l)    (l)
+                                                        u and Zv denote the intermediate activations computed at each layer.
+               H(l)    (l)
+                u and Hv are the output layers of the branch and trunk networks, respectively.
+
+               The final output GΘ (Xu ) (Xv ) is computed as a dot product:
+
+                                                                            d
+                                                                           (L)    (L)
+                                                           ⟨H(L)  (L)
+                                                             u , Hv ⟩ = ∑ Hu,i · Hv,i                                      (A4)
+                                                                            i=1
+
+
+                                                                            (L)  (L)
+               where d denotes the dimensionality of H(L)          (L)                                           (L)    (L)
+                                                          u and Hv , and Hu,i , Hv,i are the i − th elements of Hu and Hv ,
+               respectively. A trainable bias term β is added to complete the computation.
+
+
+               Appendix B: Karhunen–Loève Expansion
+               For subsurface flow problems in heterogeneous media, the heterogeneity and uncertainty of hydraulic parameters
+               can be effectively captured by modeling them as a random field (Mantoglou & Gelhar, 1987; Schad &
+               Teutsch, 1994). A common and efficient way to achieve this is the Karhunen–Loève expansion (KLE), which uses
+               a finite set of random coefficients to approximate the dominant modes of variability (Yang et al., 2004; D. Zhang
+               & Lu, 2004). By doing so, KLE not only parameterizes the heterogeneous field but also reduces its dimen-
+               sionality, making high–dimensional inverse or forward problems more tractable.
+
+               Consider the saturated hydraulic conductivity as a realization of a Gaussian random parameter field:
+               Y(z, τ) = ln[K s (z, τ) ] , where z is the space coordinate vector in physical domain D; τ is a random event from
+               probability space Ω, and Y(z, τ) can be decomposed as:
+
+                                                     Y(z, τ) = Y(z) + δ(z, τ), z ∈ D, τ ∈ Ω                                (B1)
+
+               where Y(z) is the mean of random parameter field, and δ(z, τ) is perturbation. According to Ghanem and Spa-
+               nos (2003) and Zhang and Lu (2004), the perturbation δ(z, τ) can be expanded as:
+
+                                                                     ∞       √̅̅̅̅̅
+                                                           δ(z, τ) = ∑ ξn (τ) λn fn (z)                                    (B2)
+                                                                      n=1
+
+
+               where ξn (τ) are orthogonal Gaussian random variables with zero mean and unit variance; λn and fn (z) are the
+               monotonically decreasing eigenvalues and corresponding eigenfunctions, respectively. These eigenvalues and
+               eigenfunctions can be obtained by solving the following Fredholm equation:
+
+
+                                                      ∫CY (z1 , z2 ) fn (z1 ) dz1 = λn fn (z2 )                            (B3)
+                                                       D
+
+
+
+
+GONG AND ZHA                                                                                                           23 of 35
+                                                                                                                                          19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                                 10.1029/2025WR040040
+
+
+
+               where CY (z1 , z2 ) is the covariance function of Y(z, τ) , characterizing the spatial correlations between point z1 and
+               z2 in the domain D. Assuming CY (z1 , z2 ) follows and exponential model:
+
+                                                                                  − |z − z2 |
+                                                         CY (z1 , z2 ) = σ2Y exp ( 1         )                                    (B4)
+                                                                                       η
+
+               where η and σ2Y are the correlation length and variance of Y(z, τ) , respectively. Then the eigenvalues and
+               eigenfunctions can be calculated analytically as (D. Zhang & Lu, 2004):
+
+                                                        ⎪
+                                                        ⎧
+                                                        ⎪         2ησ2
+                                                        ⎪
+                                                        ⎪
+                                                        ⎪λn = 2 2 Y
+                                                        ⎪
+                                                        ⎪       η ωn + 1
+                                                        ⎪
+                                                        ⎪
+                                                        ⎪
+                                                        ⎨f                                     T
+                                                          n (z) = [fn (z1 ), ..., fn (zL )]                                       (B5)
+                                                        ⎪
+                                                        ⎪
+                                                        ⎪
+                                                        ⎪         ηωn cos (ωn z) + sin(ωn z)
+                                                        ⎪
+                                                        ⎪f (z) = √       ̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅
+                                                        ⎪
+                                                        ⎪n
+                                                        ⎪
+                                                        ⎪                ( η2 ω2n + 1) L
+                                                        ⎩                                            +η
+                                                                                     2
+
+               where L is the length of the physical domain D, and ωn are the positive roots of the characteristic equation:
+
+                                                       ( η2 ω2 − 1) sin (ωL) = 2ηω cos (ωL)                                       (B6)
+
+               Due to the rapid decay of λn with increasing n, the infinite series in Eq. (A6) can be approximated by a finite sum,
+               significantly reducing the dimensionality:
+
+                                                       ∞       √̅̅̅̅̅       Nkl     √̅̅̅̅̅
+                                                       ∑ ξn (τ) λn fn (z) ≈ ∑ ξn (τ) λn fn (z)                                    (B7)
+                                                       n=1                          n=1
+
+
+               where Nkl is the number of retained terms. The extent to which the original heterogeneity is retained can be
+               quantified by the cumulative energy γ:
+
+                                                                Nkl
+                                                               ∑n=1 λn ∑Nn=1kl
+                                                                               λn ∑Nn=1
+                                                                                     kl
+                                                                                        λn
+                                                        γ=      ∞      = 2       =   2
+                                                                                                                                  (B8)
+                                                               ∑n=1 λn   σY ∫ dz   σY L
+                                                                                    D
+
+
+               When γ is close to one, the truncated expansion retains most of the heterogeneity of the original random field.
+
+
+               Appendix C: Reference Solutions
+               This appendix presents the reference saturated hydraulic conductivity field generated using KLE, along with the
+               corresponding solutions obtained from HYDRUS–1D (Simunek et al., 2005) in this study. The solution for the
+               basic experimental setup is shown in Figure C1, while the others are displayed in Figure C2 and Figure C3.
+
+
+
+
+GONG AND ZHA                                                                                                                   24 of 35
+19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                25 of 35
+                                                                                                                                                                                                                                      Figure C1. Reference ln K s field and corresponding solutions under the basic experimental setup: (a) Saturated hydraulic
+                    10.1029/2025WR040040
+
+
+
+
+                                                                                                                                                                                                                                      conductivity (log–transformed); (b) Matric potential; (c) Volumetric water content; (d) Hydraulic conductivity field.
+               Water Resources Research
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                GONG AND ZHA
+19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       26 of 35
+                    10.1029/2025WR040040
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                Figure C2. Reference saturated hydraulic conductivity fields from different KLE realizations and their corresponding
+                                                                                                                                                                                                                                                                                                                                                                solutions: (a) Random coefficient 1; (b) Random coefficient 2; (c) Variance = 2; (d) Variance = 4; (e) Correlation
+               Water Resources Research
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                length = 60; (f) Correlation length = 40.
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       GONG AND ZHA
+                                                                                                                                                                    19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                            Water Resources Research                                                           10.1029/2025WR040040
+
+
+
+
+                                    Figure C3. Reference solutions under a time–dependent uBC: (a) Time–dependent uBC (negative values indicate
+                                    precipitation; positive values indicate evaporation); (b) Matric potential; (c) Volumetric water content; (d) Hydraulic
+                                    conductivity field.
+
+                                    Appendix D: Robustness to Baseline Model Hyperparameters
+                                    A potential concern regarding the findings in Section 4.2 is whether KLE–PINN–EC's performance under data–
+                                    sparse conditions might result from suboptimal hyperparameter choices in the baseline models rather than
+                                    fundamental algorithmic advantages. While comprehensive hyperparameter optimization lies beyond this study's
+                                    scope, we address this concern through targeted sensitivity analyses.
+
+                                    We conducted additional experiments varying the network architectures of KLE–PINN and KLE–PINN–C. To
+                                    ensure fair comparison, all configurations maintained approximately 20000 trainable parameters, comparable to
+                                    KLE–PINN–EC (Section 3.1.2). Table D1 summarizes these alternative configurations, and Figure D1 presents
+                                    the comparative results across observation densities.
+
+
+
+
+Table D1
+Network Configurations for KLE–PINN and KLE–PINN–C, Number of Trainable Parameters, and Approximate Training Time
+Number of layers      Neurons in each hidden layer        Trainable parameters (KLE–PINN/KLE–PINN–C)                  Training time (KLE–PINN/KLE–PINN–C)
+3                                 139                                        20860/24613                                              24/26 min
+4                                  99                                        20800/23473                                              28/30 min
+5 (baseline)                       81                                        20746/22933                                              31/34 min
+6                                  70                                        20590/22480                                              36/38 min
+7                                  63                                        20800/22501                                              41/42 min
+
+
+
+GONG AND ZHA                                                                                                                                             27 of 35
+                                                                                                                                            19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                         10.1029/2025WR040040
+
+
+
+
+               Figure D1. Sensitivity of baseline architectures and performance comparison. (a) 6 observation points (baseline
+               configuration), (b) 4 observation points, and (c) 3 observation points.
+
+               While hyperparameter variations do influence the absolute performance of individual models, the relative per-
+               formance remains consistent. KLE–PINN–EC maintains its advantage across all tested configurations, particu-
+               larly under sparse observations. This consistency across diverse architectural choices confirms that KLE–PINN–
+               EC's advantages arise from its fundamental design, rather than fortuitous hyperparameter selection.
+
+
+
+GONG AND ZHA                                                                                                                     28 of 35
+                                                                                                                                     19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                      Water Resources Research                                                      10.1029/2025WR040040
+
+
+               Appendix E: Sensitivity of ES–MDA to Ensemble Sizes and Assimilation Steps
+               In Section 4.3.2, we observed that ES–MDA struggled to invert soil hydraulic parameters ln K s when the pre-
+               scribed uBC flux was biased in both magnitude and timing (scenarios S5–S8). To ensure that this performance
+               limitation is not merely due to suboptimal choices of ensemble size or assimilation steps, this appendix in-
+               vestigates the sensitivity of ES–MDA to these hyperparameters.
+               We varied the ensemble size over 50, 100 (baseline), 150 and 200 members. The approximate computational costs
+               for these configurations were 14, 28, 42 and 56 min, respectively. Table E1 reports the final estimation accuracy
+               for ln K s ; Figure E1 compares the reconstructed uBC fluxes, and Figure E2 tracks the RMSE of ln K s estimates
+               throughout the DA process for each ensemble size. The results indicate that while minor variations in performance
+               are observable with different ensemble sizes, these differences are not substantial enough to alter the fundamental
+               finding: ES–MDA exhibits limited capability in providing accurate parameter estimations (Table E1) or recon-
+               structing the uBC flux (Figure E1) in scenarios S5–S8, regardless of the ensemble size tested.
+               Figure E2 further illustrates this pattern by showing consistent RMSE evolution trends across all DA steps for the
+               different ensemble sizes within each scenario. For scenarios S5 and S6, the RMSE diverges after approximately
+               10 steps regardless of ensemble size, indicating challenges in the assimilation process. Scenarios S7 and S8 show
+               initial RMSE increases followed by partial recovery, yet final errors remain substantially higher than those
+               achieved by KLE–PINN–EC. These findings suggest that simply increasing the ensemble size or adjusting the
+               number of DA steps does not address the fundamental challenges encountered in these complex scenarios where
+               both timing and magnitude of BCs are uncertain. The performance limitations appear to stem from the inherent
+               difficulty of simultaneously resolving multiple sources of uncertainty within the ES–MDA framework, rather
+               than from insufficient ensemble representation.
+
+
+                Table E1
+                Final ln K s Estimation Performance for Scenarios S5–S8 Using ES–MDA With Varying Ensemble Sizes
+                                                                                  Ensemble size
+                Scenarios        Metrics              50               100 (baseline)               150                 200
+                S5               R2             − 21.39 ± 2.63        − 17.85 ± 2.21         − 20.58 ± 2.75        − 19.09 ± 3.36
+                                 RMSE              4.75 ± 0.28           4.36 ± 0.25              4.66 ± 0.30        4.49 ± 0.37
+                S6               R2             − 21.38 ± 2.90        − 17.88 ± 2.24          20.59 ± 2.70         − 19.03 ± 3.26
+                                 RMSE              4.75 ± 0.31           4.36 ± 0.26              4.66 ± 0.30        4.49 ± 0.36
+                S7               R2              − 2.14 ± 1.38          − 2.37 ± 0.92         − 2.19 ± 0.83         − 0.89 ± 0.34
+                                 RMSE              1.73 ± 0.42           1.83 ± 0.25              1.78 ± 0.24        1.38 ± 0.13
+                                   2
+                S8               R               − 2.18 ± 1.39          − 2.29 ± 0.94         − 2.10 ± 0.86         − 0.80 ± 0.33
+                                 RMSE              1.74 ± 0.42           1.81 ± 0.26              1.75 ± 0.25        1.34 ± 0.13
+
+
+
+
+GONG AND ZHA                                                                                                             29 of 35
+19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    30 of 35
+                    10.1029/2025WR040040
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                     Figure E1. Estimated uBC flux by ES–MDA with varying ensemble sizes for scenarios S5–S8: (a) S5, (b) S6, (c) S7, and (d) S8.
+               Water Resources Research
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    GONG AND ZHA
+19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    31 of 35
+                                                                                                                                                                                                                                                                                                                                           Figure E2. Evolution of RMSE for ES–MDA ln K s estimations across all data assimilation steps, comparing different ensemble sizes for scenarios S5–S8: (a) S5, (b) S6,
+                    10.1029/2025WR040040
+               Water Resources Research
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    GONG AND ZHA
+                                                                                                                                                                                                                                                                                                                                           (c) S7, and (d) S8.
+                                                                                                                                                                                                  19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                                                    Water Resources Research                                                                         10.1029/2025WR040040
+
+
+                                           Data Availability Statement
+                                           The Python code for the PINN models and the data used in this study are openly available through Gong (2025) at
+                                           https://zenodo.org/records/14874531. The Phydrus and pyESMDA packages used in this study are available
+                                           through Collenteur et al. (2020) and Collet (2023), respectively.
+
+
+Acknowledgments                            References
+The authors thank the financial supports
+from the National Natural Science          Abadi, M., Barham, P., Chen, J., Chen, Z., Davis, A., Dean, J., et al. (2016). {TensorFlow}: A system for {Large‐Scale} machine learning. In 12th
+Foundation of China (52479045,               USENIX Symposium on Operating Systems Design and Implementation (OSDI 16) (pp. 265–283). Retrieved from https://www.usenix.org/
+52279042), the Key Research and              conference/osdi16/technical‐sessions/presentation/abadi
+Development Program in Guangxi             Alzubaidi, L., Bai, J., Al‐Sabaawi, A., Santamaría, J., Albahri, A. S., Al‐dabbagh, B. S. N., et al. (2023). A survey on deep learning tools dealing
+(AB23026021), and the Open Research          with data scarcity: Definitions, challenges, solutions, tips, and applications. Journal of Big Data, 10(1), 46. https://doi.org/10.1186/s40537‐
+Fund of Guangxi Key Laboratory of Water      023‐00727‐2
+Engineering Materials and Structures,      Bandai, T., & Ghezzehei, T. A. (2021). Physics‐informed neural networks with monotonicity constraints for Richardson‐Richards equation:
+Guangxi Institute of Water Resources         Estimation of constitutive relationships and soil water flux density from volumetric water content measurements. Water Resources Research,
+Research (GXHRI‐WEMS‐2022‐07). The           57(2), e2020WR027642. https://doi.org/10.1029/2020WR027642
+authors would also like to express their   Bandai, T., & Ghezzehei, T. A. (2022). Forward and inverse modeling of water flow in unsaturated soils with discontinuous hydraulic con-
+sincere gratitude to the anonymous           ductivities using physics‐informed neural networks with domain decomposition. Hydrology and Earth System Sciences, 26(16), 4469–4495.
+reviewers for their insightful comments      https://doi.org/10.5194/hess‐26‐4469‐2022
+and constructive suggestions, which have   Bandai, T., Ghezzehei, T. A., Jiang, P., Kidger, P., Chen, X., & Steefel, C. I. (2024). Learning constitutive relations from soil moisture data via
+greatly improved the manuscript.             physically constrained neural networks. Water Resources Research, 60(7), e2024WR037318. https://doi.org/10.1029/2024WR037318
+                                           Bauer, P., Thorpe, A., & Brunet, G. (2015). The quiet revolution of numerical weather prediction. Nature, 525(7567), 47–55. https://doi.org/10.
+                                             1038/nature14956
+                                           Bauser, H. H., Kim, M., Ng, W., Bugaj, A., & Troch, P. A. (2022). Richards equation at the hillslope scale: Can we resolve the heterogeneity of
+                                             soil hydraulic material properties? Water Resources Research, 58(12), e2022WR032294. https://doi.org/10.1029/2022WR032294
+                                           Bauser, H. H., Riedel, L., Berg, D., Troch, P. A., & Roth, K. (2020). Challenges with effective representations of heterogeneity in soil hydrology
+                                             based on local water content measurements. Vadose Zone Journal, 19(1), e20040. https://doi.org/10.1002/vzj2.20040
+                                           Berardi, M., & Vurro, M. (2016). The numerical solution of Richards' equation by means of method of lines and ensemble Kalman filter.
+                                             Mathematics and Computers in Simulation, 125, 38–47. https://doi.org/10.1016/j.matcom.2015.08.019
+                                           Beven, K., & Freer, J. (2001). Equifinality, data assimilation, and uncertainty estimation in mechanistic modelling of complex environmental
+                                             systems using the GLUE methodology. Journal of Hydrology, 249(1), 11–29. https://doi.org/10.1016/S0022‐1694(01)00421‐8
+                                           Bogena, H. R., Huisman, J. A., Oberdörster, C., & Vereecken, H. (2007). Evaluation of a low‐cost soil water content sensor for wireless network
+                                             applications. Journal of Hydrology, 344(1), 32–42. https://doi.org/10.1016/j.jhydrol.2007.06.032
+                                           Cai, S., Mao, Z., Wang, Z., Yin, M., & Karniadakis, G. E. (2021). Physics‐informed neural networks (PINNs) for fluid mechanics: A review. Acta
+                                             Mechanica Sinica, 37(12), 1727–1738. https://doi.org/10.1007/s10409‐021‐01148‐1
+                                           Carrassi, A., Bocquet, M., Bertino, L., & Evensen, G. (2018). Data assimilation in the geosciences: An overview of methods, issues, and per-
+                                             spectives. WIREs Climate Change, 9(5), e535. https://doi.org/10.1002/wcc.535
+                                           Chen, Y., Xu, Y., Wang, L., & Li, T. (2023). Modeling water flow in unsaturated soils through physics‐informed neural network with principled
+                                             loss function. Computers and Geotechnics, 161, 105546. https://doi.org/10.1016/j.compgeo.2023.105546
+                                           Chen, Z., Govindaraju, R. S., & Kavvas, M. L. (1994). Spatial averaging of unsaturated flow equations under infiltration conditions over areally
+                                             heterogeneous fields 2. Numerical simulations. Water Resources Research, 30(2), 535–548. https://doi.org/10.1029/93WR02884
+                                           Collenteur, R., Vremec, M., & Brunetti, G. (2020). Interfacing FORTAN code with Python: An example for the Hydrus‐1D model (Vol. 15377).
+                                             EGU General Assembly Conference Abstracts. Retrieved from https://ui.adsabs.harvard.edu/abs/2020EGUGA..2215377C/abstract
+                                           Collet, A. (2023). pyESMDA—Python ensemble smoother with multiple data assimilation (version v0.4.3) [Computer software]. Zenodo. https://
+                                             doi.org/10.5281/zenodo.7425670
+                                           Cuomo, S., Di Cola, V. S., Giampaolo, F., Rozza, G., Raissi, M., & Piccialli, F. (2022). Scientific machine learning through physics–informed
+                                             neural networks: Where we are and what's next. Journal of Scientific Computing, 92(3), 88. https://doi.org/10.1007/s10915‐022‐01939‐z
+                                           Cybenko, G. (1989). Approximation by superpositions of a sigmoidal function. Mathematics of Control, Signals, and Systems, 2(4), 303–314.
+                                             https://doi.org/10.1007/BF02551274
+                                           Das, N. N., Mohanty, B. P., & Efendiev, Y. (2010). Characterization of effective saturated hydraulic conductivity in an agricultural field using
+                                             Karhunen‐Loève expansion with the Markov chain Monte Carlo technique. Water Resources Research, 46(6), 2008WR007100. https://doi.org/
+                                             10.1029/2008WR007100
+                                           Depina, I., Jain, S., Mar Valsson, S., & Gotovac, H. (2022). Application of physics‐informed neural networks to inverse problems in unsaturated
+                                             groundwater flow. Georisk: Assessment and Management of Risk for Engineered Systems and Geohazards, 16(1), 21–36. https://doi.org/10.
+                                             1080/17499518.2021.1971251
+                                           Doherty, J., & Welter, D. (2010). A short exploration of structural noise. Water Resources Research, 46(5). https://doi.org/10.1029/
+                                             2009WR008377
+                                           Drécourt, J.‐P., Madsen, H., & Rosbjerg, D. (2006). Calibration framework for a Kalman filter applied to a groundwater model. Advances in Water
+                                             Resources, 29(5), 719–734. https://doi.org/10.1016/j.advwatres.2005.07.007
+                                           Elkhadrawi, M., Ng, C., Bain, D. J., Sargent, E. E., Stearsman, E. V., Gray, K. A., & Akcakaya, M. (2024). Novel physics informed‐neural
+                                             networks for estimation of hydraulic conductivity of green infrastructure as a performance metric by solving Richards–Richardson PDE.
+                                             Neural Computing & Applications, 36(10), 5555–5569. https://doi.org/10.1007/s00521‐023‐09378‐z
+                                           Emerick, A. A., & Reynolds, A. C. (2013). Ensemble smoother with multiple data assimilation. Computers & Geosciences, 55, 3–15. https://doi.
+                                             org/10.1016/j.cageo.2012.03.011
+                                           Erdal, D., Neuweiler, I., & Wollschläger, U. (2014). Using a bias aware EnKF to account for unresolved structure in an unsaturated zone model.
+                                             Water Resources Research, 50(1), 132–147. https://doi.org/10.1002/2012WR013443
+                                           Farthing, M. W., & Ogden, F. L. (2017). Numerical solution of Richards' equation: A review of advances and challenges. Soil Science Society of
+                                             America Journal, 81(6), 1257–1269. https://doi.org/10.2136/sssaj2017.02.0058
+
+
+
+
+GONG AND ZHA                                                                                                                                                                       32 of 35
+                                                                                                                                                                    19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                        Water Resources Research                                                                        10.1029/2025WR040040
+
+
+               Geer, A. J. (2021). Learning Earth system models from observations: Machine learning or data assimilation? Philosophical Transactions of the
+                   Royal Society A: Mathematical, Physical and Engineering Sciences, 379(2194), 20200089. https://doi.org/10.1098/rsta.2020.0089
+               Gelati, E., Decharme, B., Calvet, J.‐C., Minvielle, M., Polcher, J., Fairbairn, D., & Weedon, G. P. (2018). Hydrological assessment of atmospheric
+                   forcing uncertainty in the Euro‐Mediterranean area using a land surface model. Hydrology and Earth System Sciences, 22(4), 2091–2115.
+                   https://doi.org/10.5194/hess‐22‐2091‐2018
+               Ghanem, R. G., & Spanos, P. D. (2003). Stochastic finite elements: A spectral approach. Courier Corporation.
+               Gharamti, M. E., Ait‐El‐Fquih, B., & Hoteit, I. (2015). An iterative ensemble Kalman filter with one‐step‐ahead smoothing for state‐parameters
+                   estimation of contaminant transport models. Journal of Hydrology, 527, 442–457. https://doi.org/10.1016/j.jhydrol.2015.05.004
+               Gillijns, S., & Moor, B. D. (2007). Joint state and boundary condition estimation in linear data assimilation using basis function expansion.
+                   Modeling Identification and Control. https://doi.org/10.5555/1710594.1710682
+               Glorot, X., & Bengio, Y. (2010). Understanding the difficulty of training deep feedforward neural networks. In Proceedings of the Thirteenth
+                   International Conference on Artificial Intelligence and Statistics (pp. 249–256). Retrieved from http://proceedings.mlr.press/v9/glorot10a
+               Gong, X. (2025). KLE‐PINN‐EC: Physics–informed neural network with enhanced parameter‐state coupling for inverse modeling of unsaturated
+                   flow in heterogeneous soils (v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.14874531
+               Haruzi, P., & Moreno, Z. (2023). Modeling water flow and solute transport in unsaturated soils using physics‐informed neural networks trained
+                   with geoelectrical data. Water Resources Research, 59(6), e2023WR034538. https://doi.org/10.1029/2023WR034538
+               Hecht‐Nielsen, R. (1989). Theory of the backpropagation neural network. In International 1989 Joint Conference on Neural Networks (Vol. 1, pp.
+                   593–605). IEEE. https://doi.org/10.1109/IJCNN.1989.118638
+               Hendricks Franssen, H. J., & Kinzelbach, W. (2008). Real‐time groundwater flow modeling with the Ensemble Kalman Filter: Joint estimation of
+                   states and parameters and the filter inbreeding problem. Water Resources Research, 44(9). https://doi.org/10.1029/2007WR006505
+               Herrera, P. A., Marazuela, M. A., & Hofmann, T. (2022). Parameter estimation and uncertainty analysis in hydrological modeling. WIREs Water,
+                   9(1), e1569. https://doi.org/10.1002/wat2.1569
+               Hornik, K., Stinchcombe, M., & White, H. (1989). Multilayer feedforward networks are universal approximators. Neural Networks, 2(5), 359–
+                   366. https://doi.org/10.1016/0893‐6080(89)90020‐8
+               Ji, Y., Zha, Y., Yeh, T.‐C. J., Shi, L., & Wang, Y. (2024). Groundwater inverse modeling: Physics‐informed neural network with disentangled
+                   constraints and errors. Journal of Hydrology, 640, 131703. https://doi.org/10.1016/j.jhydrol.2024.131703
+               Karniadakis, G. E., Kevrekidis, I. G., Lu, L., Perdikaris, P., Wang, S., & Yang, L. (2021). Physics‐informed machine learning. Nature Reviews
+                   Physics, 3(6), 422–440. https://doi.org/10.1038/s42254‐021‐00314‐5
+               Karpatne, A., Atluri, G., Faghmous, J. H., Steinbach, M., Banerjee, A., Ganguly, A., et al. (2017). Theory‐guided data science: A new paradigm
+                   for scientific discovery from data. IEEE Transactions on Knowledge and Data Engineering, 29(10), 2318–2331. https://doi.org/10.1109/
+                   TKDE.2017.2720168
+               Ketkar, N., & Moolayil, J. (2021). Automatic differentiation in deep learning. In N. Ketkar & J. Moolayil (Eds.), Deep learning with Python (pp.
+                   133–145). Apress. https://doi.org/10.1007/978‐1‐4842‐5364‐9_4
+               Kingma, D. P., & Ba, J. (2017). Adam: A method for stochastic optimization (No. arXiv:1412.6980). arXiv. Retrieved from http://arxiv.org/abs/
+                   1412.6980
+               Lawrence, D. M., Fisher, R. A., Koven, C. D., Oleson, K. W., Swenson, S. C., Bonan, G., et al. (2019). The Community Land Model Version 5:
+                   Description of new features, benchmarking, and impact of forcing uncertainty. Journal of Advances in Modeling Earth Systems, 11(12), 4245–
+                   4287. https://doi.org/10.1029/2018MS001583
+               Lazer, D., Kennedy, R., King, G., & Vespignani, A. (2014). The parable of google flu: Traps in big data analysis. Science, 343(6176), 1203–1205.
+                   https://doi.org/10.1126/science.1248506
+               Lee, S., Park, J., Jeong, J., & Choi, M. (2025). Soil moisture and evapotranspiration responses to precipitation uncertainty using Noah‐MP land
+                   surface model. Stochastic Environmental Research and Risk Assessment, 39(6), 2723–2742. https://doi.org/10.1007/s00477‐025‐02991‐5
+               Leverett, M. (1941). Capillary behavior in porous solids. Transactions of the AIME, 142(1), 152–169. https://doi.org/10.2118/941152‐g
+               Li, J., & Tartakovsky, A. M. (2022). Physics‐informed Karhunen‐Loéve and neural network approximations for solving inverse differential
+                   equation problems. Journal of Computational Physics, 462, 111230. https://doi.org/10.1016/j.jcp.2022.111230
+               Li, P., Zha, Y., Shi, L., Tso, C.‐H. M., Zhang, Y., & Zeng, W. (2020). Comparison of the use of a physical‐based model with data assimilation and
+                   machine learning methods for simulating soil water dynamics. Journal of Hydrology, 584, 124692. https://doi.org/10.1016/j.jhydrol.2020.
+                   124692
+               Liu, Y., & Gupta, H. V. (2007). Uncertainty in hydrologic modeling: Toward an integrated data assimilation framework. Water Resources
+                   Research, 43(7). https://doi.org/10.1029/2006WR005756
+               Loyola‐Gonzalez, O. (2019). Black‐box vs. white‐box: Understanding their advantages and weaknesses from a practical point of view. IEEE
+                   Access, 7, 154096–154113. https://doi.org/10.1109/ACCESS.2019.2949286
+               Lu, L., Jin, P., Pang, G., Zhang, Z., & Karniadakis, G. E. (2021). Learning nonlinear operators via DeepONet based on the universal approximation
+                   theorem of operators. Nature Machine Intelligence, 3(3), 218–229. https://doi.org/10.1038/s42256‐021‐00302‐5
+               Mantoglou, A. (1992). A theoretical approach for modeling unsaturated flow in spatially variable soils: Effective flow models in finite domains
+                   and nonstationarity. Water Resources Research, 28(1), 251–267. https://doi.org/10.1029/91WR02232
+               Mantoglou, A., & Gelhar, L. W. (1987). Stochastic modeling of large‐scale transient unsaturated flow systems. Water Resources Research, 23(1),
+                   37–46. https://doi.org/10.1029/WR023i001p00037
+               Moradkhani, H., Sorooshian, S., Gupta, H. V., & Houser, P. R. (2005). Dual state–parameter estimation of hydrological models using ensemble
+                   Kalman filter. Advances in Water Resources, 28(2), 135–147. https://doi.org/10.1016/j.advwatres.2004.09.002
+               Mualem, Y. (1976). A new model for predicting the hydraulic conductivity of unsaturated porous media. Water Resources Research, 12(3), 513–
+                   522. https://doi.org/10.1029/WR012i003p00513
+               Nielsen, D. R., Th. Van Genuchten, M., & Biggar, J. W. (1986). Water flow and solute transport processes in the unsaturated zone. Water Re-
+                   sources Research, 22(9S). https://doi.org/10.1029/WR022i09Sp0089S
+               Niu, G.‐Y., Yang, Z.‐L., Mitchell, K. E., Chen, F., Ek, M. B., Barlage, M., et al. (2011). The community Noah land surface model with mul-
+                   tiparameterization options (Noah‐MP): 1. Model description and evaluation with local‐scale measurements. Journal of Geophysical Research,
+                   116(D12), D12109. https://doi.org/10.1029/2010JD015139
+               Oikawa, K., & Saito, H. (2024). Inverse analysis of soil hydraulic parameters of layered soil profiles using physics‐informed neural networks with
+                   unsaturated water flow models. Vadose Zone Journal, 23(6), e20375. https://doi.org/10.1002/vzj2.20375
+               Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., et al. (2019). Pytorch: An imperative style, high‐performance deep learning
+                   library. Advances in Neural Information Processing Systems, 32. Retrieved from https://proceedings.neurips.cc/paper/2019/hash/
+                   bdbca288fee7f92f2bfa9f7012727740‐Abstract.html
+
+
+
+GONG AND ZHA                                                                                                                                         33 of 35
+                                                                                                                                                                         19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                        Water Resources Research                                                                           10.1029/2025WR040040
+
+
+               Raissi, M., Perdikaris, P., & Karniadakis, G. E. (2019). Physics‐informed neural networks: A deep learning framework for solving forward and
+                  inverse problems involving nonlinear partial differential equations. Journal of Computational Physics, 378, 686–707. https://doi.org/10.1016/j.
+                  jcp.2018.10.045
+               Richards, L. A. (1931). Capillary conduction of liquids through porous mediums. Physics, 1(5), 318–333. https://doi.org/10.1063/1.1745010
+               Richardson, L. F. (1922). Weather prediction by numerical process. University Press.
+               Russo, D., & Bouton, M. (1992). Statistical analysis of spatial variability in unsaturated flow parameters. Water Resources Research, 28(7), 1911–
+                  1925. https://doi.org/10.1029/92WR00669
+               Russo, D., Bresler, E., Shani, U., & Parker, J. C. (1991). Analyses of infiltration events in relation to determining soil hydraulic properties by
+                  inverse problem methodology. Water Resources Research, 27(6), 1361–1373. https://doi.org/10.1029/90WR02776
+               Sakar, C., Schwartz, N., & Moreno, Z. (2024). Physics‐informed neural networks trained with time‐lapse geo‐electrical tomograms to estimate
+                  water saturation, permeability and petrophysical relations at heterogeneous soils. Water Resources Research, 60(8), e2024WR037672. https://
+                  doi.org/10.1029/2024WR037672
+               Schad, H., & Teutsch, G. (1994). Effects of the investigation scale on pumping test results in heterogeneous porous aquifers. Journal of Hy-
+                  drology, 159(1), 61–77. https://doi.org/10.1016/0022‐1694(94)90249‐6
+               Shen, C. (2018). A transdisciplinary review of deep learning research and its relevance for water resources scientists. Water Resources Research,
+                  54(11), 8558–8593. https://doi.org/10.1029/2018WR022643
+               Shibata, T., Koch, M. C., Papaioannou, I., & Fujisawa, K. (2025). Efficient Bayesian inversion for simultaneous estimation of geometry and
+                  spatial field using the Karhunen‐Loève expansion. Computer Methods in Applied Mechanics and Engineering, 441, 117960. https://doi.org/10.
+                  1016/j.cma.2025.117960
+               Shrestha, A., Nair, A. S., & Indu, J. (2020). Role of precipitation forcing on the uncertainty of land surface model simulated soil moisture es-
+                  timates. Journal of Hydrology, 580, 124264. https://doi.org/10.1016/j.jhydrol.2019.124264
+               Simunek, J., Van Genuchten, M. T., & Sejna, M. (2005). The HYDRUS‐1D software package for simulating the one‐dimensional movement of
+                  water, heat, and multiple solutes in variably‐saturated media (Vol. 3, pp. 1–240). University of California‐Riverside Research Reports.
+               Sit, M., Demiray, B. Z., Xiang, Z., Ewing, G. J., Sermet, Y., & Demir, I. (2020). A comprehensive review of deep learning applications in
+                  hydrology and water resources. Water Science and Technology, 82(12), 2635–2670. https://doi.org/10.2166/wst.2020.369
+               Sophocleous, M. (2002). Interactions between groundwater and surface water: The state of the science. Hydrogeology Journal, 10(1), 52–67.
+                  https://doi.org/10.1007/s10040‐001‐0170‐8
+               Tartakovsky, A. M., Marrero, C. O., Perdikaris, P., Tartakovsky, G. D., & Barajas‐Solano, D. (2020). Physics‐informed deep neural networks for
+                  learning parameters and constitutive relationships in subsurface flow problems. Water Resources Research, 56(5), e2019WR026731. https://
+                  doi.org/10.1029/2019WR026731
+               Thorndahl, S., Einfalt, T., Willems, P., Nielsen, J. E., ten Veldhuis, M.‐C., Arnbjerg‐Nielsen, K., et al. (2017). Weather radar rainfall data in urban
+                  hydrology. Hydrology and Earth System Sciences, 21(3), 1359–1380. https://doi.org/10.5194/hess‐21‐1359‐2017
+               Van Genuchten, M. T. (1980). A closed‐form equation for predicting the hydraulic conductivity of unsaturated soils. Soil Science Society of
+                  America Journal, 44(5), 892–898. https://doi.org/10.2136/sssaj1980.03615995004400050002x
+               Vogel, H. (2019). Scale issues in soil hydrology. Vadose Zone Journal, 18(1), 1–10. https://doi.org/10.2136/vzj2019.01.0001
+               Vrugt, J. A., Diks, C. G. H., Gupta, H. V., Bouten, W., & Verstraten, J. M. (2005). Improved treatment of uncertainty in hydrologic modeling:
+                  Combining the strengths of global optimization and data assimilation. Water Resources Research, 41(1), 2004WR003059. https://doi.org/10.
+                  1029/2004WR003059
+               Wang, N., Chang, H., & Zhang, D. (2021a). Deep‐learning‐based inverse modeling approaches: A subsurface flow example. Journal of
+                  Geophysical Research: Solid Earth, 126(2), e2020JB020549. https://doi.org/10.1029/2020JB020549
+               Wang, N., Chang, H., & Zhang, D. (2021b). Efficient uncertainty quantification for dynamic subsurface flow with surrogate by theory‐guided
+                  neural network. Computer Methods in Applied Mechanics and Engineering, 373, 113492. https://doi.org/10.1016/j.cma.2020.113492
+               Wang, N., Kong, X.‐Z., & Zhang, D. (2024). Physics‐informed Convolutional Decoder (PICD): A novel approach for direct inversion of het-
+                  erogeneous subsurface flow. Geophysical Research Letters, 51(13), e2024GL108163. https://doi.org/10.1029/2024GL108163
+               Wang, N., Zhang, D., Chang, H., & Li, H. (2020). Deep learning of subsurface flow via theory‐guided neural network. Journal of Hydrology, 584,
+                  124700. https://doi.org/10.1016/j.jhydrol.2020.124700
+               Wang, S., Teng, Y., & Perdikaris, P. (2021). Understanding and mitigating gradient flow pathologies in physics‐informed neural networks. SIAM
+                  Journal on Scientific Computing, 43(5), A3055–A3081. https://doi.org/10.1137/20M1318043
+               Wang, S., Wang, H., & Perdikaris, P. (2022). Improved architectures and training algorithms for deep operator networks. Journal of Scientific
+                  Computing, 92(2), 35. https://doi.org/10.1007/s10915‐022‐01881‐0
+               Wang, Y., Shi, L., Hu, X., Song, W., & Wang, L. (2023). Multiphysics‐informed neural networks for coupled soil hydrothermal modeling. Water
+                  Resources Research, 59(1), e2022WR031960. https://doi.org/10.1029/2022WR031960
+               Wang, Y., Wang, W., Ma, Z., Zhao, M., Li, W., Hou, X., et al. (2023). A deep learning approach based on physical constraints for predicting soil
+                  moisture in unsaturated zones. Water Resources Research, 59(11), e2023WR035194. https://doi.org/10.1029/2023WR035194
+               Wu, C., Zhu, M., Tan, Q., Kartha, Y., & Lu, L. (2023). A comprehensive study of non‐adaptive and residual‐based adaptive sampling for physics‐
+                  informed neural networks. Computer Methods in Applied Mechanics and Engineering, 403, 115671. https://doi.org/10.1016/j.cma.2022.
+                  115671
+               Yang, J., Zhang, D., & Lu, Z. (2004). Stochastic analysis of saturated–unsaturated flow in heterogeneous media by combining Karhunen‐Loeve
+                  expansion and perturbation method. Journal of Hydrology, 294(1), 18–38. https://doi.org/10.1016/j.jhydrol.2003.10.023
+               Yeung, Y., Barajas‐Solano, D. A., & Tartakovsky, A. M. (2022). Physics‐informed machine learning method for large‐scale data assimilation
+                  problems. Water Resources Research, 58(5), e2021WR031023. https://doi.org/10.1029/2021WR031023
+               Yu, D., Yang, J., Shi, L., Zhang, Q., Huang, K., Fang, Y., & Zha, Y. (2019). On the uncertainty of initial condition and initialization approaches in
+                  variably saturated flow modeling. Hydrology and Earth System Sciences, 23(7), 2897–2914. https://doi.org/10.5194/hess‐23‐2897‐2019
+               Zha, Y., Yang, J., Zeng, J., Tso, C. M., Zeng, W., & Shi, L. (2019). Review of numerical solution of Richardson–Richards equation for variably
+                  saturated flow in soils. WIREs Water, 6(5), e1364. https://doi.org/10.1002/wat2.1364
+               Zhang, D., & Lu, Z. (2004). An efficient, high‐order perturbation approach for flow in random porous media via Karhunen–Loève and polynomial
+                  expansions. Journal of Computational Physics, 194(2), 773–794. https://doi.org/10.1016/j.jcp.2003.09.015
+               Zhang, J., Cao, C., Nan, T., Ju, L., Zhou, H., & Zeng, L. (2024). A novel deep learning approach for data assimilation of complex hydrological
+                  systems. Water Resources Research, 60(2), e2023WR035389. https://doi.org/10.1029/2023WR035389
+               Zhang, Q., Shi, L., Holzman, M., Ye, M., Wang, Y., Carmona, F., & Zha, Y. (2019). A dynamic data‐driven method for dealing with model
+                  structural error in soil moisture data assimilation. Advances in Water Resources, 132, 103407. https://doi.org/10.1016/j.advwatres.2019.
+                  103407
+
+
+
+GONG AND ZHA                                                                                                                                              34 of 35
+                                                                                                                                                                       19447973, 2025, 9, Downloaded from https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025WR040040 by NICE, National Institute for Health and Care Excellence, Wiley Online Library on [14/04/2026]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+                        Water Resources Research                                                                          10.1029/2025WR040040
+
+
+               Zheng, F., Tao, R., Maier, H. R., See, L., Savic, D., Zhang, T., et al. (2018). Crowdsourcing methods for data collection in geophysics: State of the
+                 art, issues, and future directions. Reviews of Geophysics, 56(4), 698–740. https://doi.org/10.1029/2018RG000616
+               Zheng, Q., Zeng, L., & Karniadakis, G. E. (2020). Physics‐informed semantic inpainting: Application to geostatistical modeling. Journal of
+                 Computational Physics, 419, 109676. https://doi.org/10.1016/j.jcp.2020.109676
+               Zhuo, L., Dai, Q., Zhao, B., & Han, D. (2020). Soil moisture sensor network design for hydrological applications. Hydrology and Earth System
+                 Sciences, 24(5), 2577–2591. https://doi.org/10.5194/hess‐24‐2577‐2020
+
+
+
+
+GONG AND ZHA                                                                                                                                            35 of 35
+
